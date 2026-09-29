@@ -12,7 +12,7 @@ API backend do projeto Jade Açaí, desenvolvido em Go com Gin.
 go run ./cmd/api
 ```
 
-A API fica disponível em `http://localhost:8080` por padrão. Defina `PORT` para usar outra porta.
+A API fica disponível em `http://localhost:8080` por padrão. Defina `PORT` para usar outra porta. Se houver um arquivo `.env` na raiz, suas variáveis são carregadas ao iniciar a API; variáveis já definidas no ambiente têm prioridade.
 
 ## Hot reload no desenvolvimento
 
@@ -52,10 +52,10 @@ A resposta contém os combos atuais, suas inclusões e preços em centavos (`pri
 
 ## CORS
 
-Por padrão, a API permite chamadas do frontend local em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão:
+Por padrão, a API permite chamadas do frontend publicado em `https://jadeacai-web.vercel.app` e dos frontends locais em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão. No Render, defina essa variável nas configurações do serviço (o arquivo `.env` local não é enviado ao deploy):
 
 ```powershell
-$env:CORS_ALLOWED_ORIGINS = "https://jade.example,https://admin.jade.example"
+$env:CORS_ALLOWED_ORIGINS = "https://jadeacai-web.vercel.app"
 air
 ```
 

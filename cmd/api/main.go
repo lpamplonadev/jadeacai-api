@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 	"strings"
@@ -8,9 +9,14 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Fatalf("load .env: %v", err)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -42,7 +48,11 @@ func newRouter() *gin.Engine {
 func allowedCORSOrigins() []string {
 	configuredOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if configuredOrigins == "" {
-		return []string{"http://localhost:3000", "http://127.0.0.1:3000"}
+		return []string{
+			"https://jadeacai-web.vercel.app",
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+		}
 	}
 
 	origins := make([]string, 0)
@@ -52,7 +62,11 @@ func allowedCORSOrigins() []string {
 		}
 	}
 	if len(origins) == 0 {
-		return []string{"http://localhost:3000", "http://127.0.0.1:3000"}
+		return []string{
+			"https://jadeacai-web.vercel.app",
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+		}
 	}
 
 	return origins

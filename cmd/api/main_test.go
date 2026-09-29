@@ -47,6 +47,20 @@ func TestCORSPreflightForLocalFrontend(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsDeployedFrontendByDefault(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://jadeacai-web.vercel.app")
+	response := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(response, request)
+
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://jadeacai-web.vercel.app" {
+		t.Fatalf("unexpected allow-origin header: %q", got)
+	}
+}
+
 func TestCORSUsesConfiguredOrigins(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://jade.example, https://admin.jade.example")
