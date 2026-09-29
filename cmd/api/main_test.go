@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -49,5 +50,45 @@ func TestMenuCombosEndpoint(t *testing.T) {
 	}
 	if body.Combos[3].ID != "combo-marmita" || body.Combos[3].PriceCents != 2890 {
 		t.Errorf("unexpected last combo: %+v", body.Combos[3])
+	}
+}
+
+func TestCreateOrderEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"chocolate","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":["nutella"]},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro","complement":"","reference":""},"payment":{"method":"pix","needsChange":false,"changeForCents":0},"notes":"","estimatedTotalCents":1990}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Status    string `json:"status"`
+		Persisted bool   `json:"persisted"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Status != "received" || body.Persisted {
+		t.Fatalf("unexpected response: %+v", body)
+	}
+}
+
+func TestCreateOrderRejectsInvalidPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, requestBody := range []string{`{`, `{}`} {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+
+		newRouter().ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d for %q, got %d", http.StatusBadRequest, requestBody, response.Code)
+		}
 	}
 }

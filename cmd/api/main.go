@@ -26,6 +26,7 @@ func newRouter() *gin.Engine {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/api/v1/menu/combos", getMenuCombos)
+	router.POST("/api/v1/orders", createOrder)
 
 	return router
 }
