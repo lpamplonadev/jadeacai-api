@@ -39,8 +39,16 @@ Invoke-RestMethod http://localhost:8080/health
 Resposta esperada:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
+
+## Catálogo de combos
+
+```http
+GET /api/v1/menu/combos
+```
+
+A resposta contém os combos atuais, suas inclusões e preços em centavos (`priceCents`). Esses dados refletem o catálogo do frontend no momento da implementação e ainda precisam de confirmação comercial; o frontend ainda não consome este endpoint.
 
 ## Testes
 

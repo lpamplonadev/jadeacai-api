@@ -25,6 +25,7 @@ func newRouter() *gin.Engine {
 	router.GET("/health", func(context *gin.Context) {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
+	router.GET("/api/v1/menu/combos", getMenuCombos)
 
 	return router
 }
