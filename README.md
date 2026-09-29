@@ -50,6 +50,17 @@ GET /api/v1/menu/combos
 
 A resposta contém os combos atuais, suas inclusões e preços em centavos (`priceCents`). Esses dados refletem o catálogo do frontend no momento da implementação e ainda precisam de confirmação comercial; o frontend ainda não consome este endpoint.
 
+## CORS
+
+Por padrão, a API permite chamadas do frontend local em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão:
+
+```powershell
+$env:CORS_ALLOWED_ORIGINS = "https://jade.example,https://admin.jade.example"
+air
+```
+
+Somente os métodos `GET`, `POST` e `OPTIONS` são permitidos. As origens devem incluir protocolo e domínio, sem caminho.
+
 ## Recebimento de pedidos
 
 ```http

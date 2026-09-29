@@ -25,6 +25,56 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestCORSPreflightForLocalFrontend(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	request := httptest.NewRequest(http.MethodOptions, "/api/v1/orders", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	request.Header.Set("Access-Control-Request-Headers", "content-type")
+	response := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, response.Code)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:3000" {
+		t.Fatalf("unexpected allow-origin header: %q", got)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodPost) {
+		t.Fatalf("expected POST to be allowed, got %q", got)
+	}
+}
+
+func TestCORSUsesConfiguredOrigins(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://jade.example, https://admin.jade.example")
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://admin.jade.example")
+	response := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(response, request)
+
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://admin.jade.example" {
+		t.Fatalf("unexpected allow-origin header: %q", got)
+	}
+}
+
+func TestCORSDoesNotAllowUnlistedOrigin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://unlisted.example")
+	response := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(response, request)
+
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected no allow-origin header, got %q", got)
+	}
+}
+
 func TestMenuCombosEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/combos", nil)
