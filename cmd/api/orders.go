@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -46,15 +47,25 @@ type orderPayment struct {
 	ChangeForCents int    `json:"changeForCents" binding:"gte=0"`
 }
 
-func createOrder(context *gin.Context) {
-	var request createOrderRequest
-	if err := context.ShouldBindJSON(&request); err != nil {
-		context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order payload"})
-		return
-	}
+func createOrder(store orderStore) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		var request createOrderRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order payload"})
+			return
+		}
 
-	context.JSON(http.StatusAccepted, gin.H{
-		"status":    "received",
-		"persisted": false,
-	})
+		orderID, err := store.Create(context.Request.Context(), request)
+		if err != nil {
+			log.Printf("persist order: %v", err)
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not persist order"})
+			return
+		}
+
+		context.JSON(http.StatusAccepted, gin.H{
+			"status":    "received",
+			"persisted": true,
+			"orderId":   orderID,
+		})
+	}
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,12 +12,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type testOrderStore struct {
+	order  createOrderRequest
+	id     string
+	err    error
+	called bool
+}
+
+func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (string, error) {
+	store.order = request
+	store.called = true
+	return store.id, store.err
+}
+
+func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
+	if _, err := openOrderStore(""); err == nil {
+		t.Fatal("expected missing DATABASE_URL to fail")
+	}
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
@@ -34,7 +55,7 @@ func TestCORSPreflightForLocalFrontend(t *testing.T) {
 	request.Header.Set("Access-Control-Request-Headers", "content-type")
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d", http.StatusNoContent, response.Code)
@@ -54,7 +75,7 @@ func TestCORSAllowsDeployedFrontendByDefault(t *testing.T) {
 	request.Header.Set("Origin", "https://jadeacai-web.vercel.app")
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://jadeacai-web.vercel.app" {
 		t.Fatalf("unexpected allow-origin header: %q", got)
@@ -68,7 +89,7 @@ func TestCORSUsesConfiguredOrigins(t *testing.T) {
 	request.Header.Set("Origin", "https://admin.jade.example")
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://admin.jade.example" {
 		t.Fatalf("unexpected allow-origin header: %q", got)
@@ -82,7 +103,7 @@ func TestCORSDoesNotAllowUnlistedOrigin(t *testing.T) {
 	request.Header.Set("Origin", "https://unlisted.example")
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
 		t.Fatalf("expected no allow-origin header, got %q", got)
@@ -94,7 +115,7 @@ func TestMenuCombosEndpoint(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/combos", nil)
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
@@ -119,12 +140,13 @@ func TestMenuCombosEndpoint(t *testing.T) {
 
 func TestCreateOrderEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{id: "order-123"}
 	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"chocolate","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":["nutella"]},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro","complement":"","reference":""},"payment":{"method":"pix","needsChange":false,"changeForCents":0},"notes":"","estimatedTotalCents":1990}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
-	newRouter().ServeHTTP(response, request)
+	newRouter(store).ServeHTTP(response, request)
 
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, response.Code, response.Body.String())
@@ -133,12 +155,31 @@ func TestCreateOrderEndpoint(t *testing.T) {
 	var body struct {
 		Status    string `json:"status"`
 		Persisted bool   `json:"persisted"`
+		OrderID   string `json:"orderId"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Status != "received" || body.Persisted {
+	if body.Status != "received" || !body.Persisted || body.OrderID != store.id {
 		t.Fatalf("unexpected response: %+v", body)
+	}
+	if !store.called || store.order.EstimatedTotalCents != 1990 {
+		t.Fatalf("expected order to be persisted, got %+v", store)
+	}
+}
+
+func TestCreateOrderReturnsErrorWhenPersistenceFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{err: errors.New("database unavailable")}
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500"},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro"},"payment":{"method":"pix"},"estimatedTotalCents":1990}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, response.Code)
 	}
 }
 
@@ -149,7 +190,7 @@ func TestCreateOrderRejectsInvalidPayload(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 
-		newRouter().ServeHTTP(response, request)
+		newRouter(nil).ServeHTTP(response, request)
 
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("expected status %d for %q, got %d", http.StatusBadRequest, requestBody, response.Code)

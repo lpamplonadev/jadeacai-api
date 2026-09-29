@@ -22,12 +22,18 @@ func main() {
 		port = "8080"
 	}
 
-	if err := newRouter().Run(":" + port); err != nil {
+	store, err := openOrderStore(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatalf("connect to database: %v", err)
+	}
+	defer store.Close()
+
+	if err := newRouter(store).Run(":" + port); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }
 
-func newRouter() *gin.Engine {
+func newRouter(store orderStore) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery(), cors.New(cors.Config{
 		AllowOrigins: allowedCORSOrigins(),
@@ -40,7 +46,7 @@ func newRouter() *gin.Engine {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/api/v1/menu/combos", getMenuCombos)
-	router.POST("/api/v1/orders", createOrder)
+	router.POST("/api/v1/orders", createOrder(store))
 
 	return router
 }
