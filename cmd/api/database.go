@@ -15,6 +15,7 @@ import (
 type orderStore interface {
 	Create(context.Context, createOrderRequest) (createdOrder, error)
 	List(context.Context, orderListFilter) (paginatedOrders, error)
+	Dashboard(context.Context, string) (dashboardData, error)
 	UpdateStatus(context.Context, string, string) (bool, error)
 }
 
@@ -173,6 +174,86 @@ func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilte
 	}
 	if err := rows.Err(); err != nil {
 		return paginatedOrders{}, fmt.Errorf("iterate orders: %w", err)
+	}
+
+	return result, nil
+}
+
+func (store *postgresOrderStore) Dashboard(ctx context.Context, date string) (dashboardData, error) {
+	const summaryQuery = `
+		WITH target_day AS (
+			SELECT COALESCE(NULLIF($1, '')::date, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date) AS order_date
+		)
+		SELECT
+			to_char(target_day.order_date, 'YYYY-MM-DD'),
+			COUNT(orders.id),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'received'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'preparing'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'completed'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'received'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'preparing'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'ready'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'out_for_delivery'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'delivered'),
+			COUNT(orders.id) FILTER (WHERE orders.status = 'completed')
+		FROM target_day
+		LEFT JOIN orders ON orders.order_date = target_day.order_date
+		GROUP BY target_day.order_date
+	`
+
+	result := dashboardData{
+		StatusCounts: make([]orderStatusCount, 0, len(validOrderStatuses)),
+		RecentOrders: make([]dashboardRecentOrder, 0, 5),
+	}
+	var statusTotals [len(validOrderStatuses)]int64
+	if err := store.db.QueryRowContext(ctx, summaryQuery, date).Scan(
+		&result.Date,
+		&result.OrdersToday,
+		&result.WaitingPreparation,
+		&result.InProduction,
+		&result.CompletedToday,
+		&statusTotals[0],
+		&statusTotals[1],
+		&statusTotals[2],
+		&statusTotals[3],
+		&statusTotals[4],
+		&statusTotals[5],
+	); err != nil {
+		return dashboardData{}, fmt.Errorf("query dashboard summary: %w", err)
+	}
+	for index, status := range validOrderStatuses {
+		result.StatusCounts = append(result.StatusCounts, orderStatusCount{Status: status, Count: statusTotals[index]})
+	}
+
+	const recentOrdersQuery = `
+		SELECT id::text, order_number, to_char(order_date, 'YYYY-MM-DD'), status, customer_name, estimated_total_cents, created_at
+		FROM orders
+		WHERE order_date = $1::date
+		ORDER BY order_number DESC
+		LIMIT 5
+	`
+	rows, err := store.db.QueryContext(ctx, recentOrdersQuery, result.Date)
+	if err != nil {
+		return dashboardData{}, fmt.Errorf("query recent dashboard orders: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var order dashboardRecentOrder
+		if err := rows.Scan(
+			&order.ID,
+			&order.OrderNumber,
+			&order.OrderDate,
+			&order.Status,
+			&order.CustomerName,
+			&order.EstimatedTotalCents,
+			&order.CreatedAt,
+		); err != nil {
+			return dashboardData{}, fmt.Errorf("scan recent dashboard order: %w", err)
+		}
+		result.RecentOrders = append(result.RecentOrders, order)
+	}
+	if err := rows.Err(); err != nil {
+		return dashboardData{}, fmt.Errorf("iterate recent dashboard orders: %w", err)
 	}
 
 	return result, nil

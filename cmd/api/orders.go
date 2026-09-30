@@ -85,8 +85,62 @@ type paginatedOrders struct {
 	Total  int64         `json:"total"`
 }
 
+type orderStatusCount struct {
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+type dashboardRecentOrder struct {
+	ID                  string    `json:"id"`
+	OrderNumber         int       `json:"orderNumber"`
+	OrderDate           string    `json:"orderDate"`
+	Status              string    `json:"status"`
+	CustomerName        string    `json:"customerName"`
+	EstimatedTotalCents int       `json:"estimatedTotalCents"`
+	CreatedAt           time.Time `json:"createdAt"`
+}
+
+type dashboardData struct {
+	Date               string                 `json:"date"`
+	OrdersToday        int64                  `json:"ordersToday"`
+	WaitingPreparation int64                  `json:"waitingPreparation"`
+	InProduction       int64                  `json:"inProduction"`
+	CompletedToday     int64                  `json:"completedToday"`
+	StatusCounts       []orderStatusCount     `json:"statusCounts"`
+	RecentOrders       []dashboardRecentOrder `json:"recentOrders"`
+}
+
 type updateOrderStatusRequest struct {
 	Status string `json:"status" binding:"required"`
+}
+
+var validOrderStatuses = [...]string{
+	"received",
+	"preparing",
+	"ready",
+	"out_for_delivery",
+	"delivered",
+	"completed",
+}
+
+func getDashboard(store orderStore) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		date := context.Query("date")
+		if date != "" {
+			if _, err := time.Parse("2006-01-02", date); err != nil {
+				context.JSON(http.StatusBadRequest, gin.H{"error": "invalid dashboard date"})
+				return
+			}
+		}
+
+		result, err := store.Dashboard(context.Request.Context(), date)
+		if err != nil {
+			log.Printf("get admin dashboard: %v", err)
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load dashboard"})
+			return
+		}
+		context.JSON(http.StatusOK, result)
+	}
 }
 
 func listOrders(store orderStore) gin.HandlerFunc {
@@ -151,12 +205,12 @@ func parsePositiveQuery(raw string, fallback, maximum int) (int, bool) {
 }
 
 func isValidOrderStatus(status string) bool {
-	switch status {
-	case "received", "preparing", "ready", "out_for_delivery", "delivered", "completed":
-		return true
-	default:
-		return false
+	for _, validStatus := range validOrderStatuses {
+		if status == validStatus {
+			return true
+		}
 	}
+	return false
 }
 
 func updateOrderStatus(store orderStore) gin.HandlerFunc {

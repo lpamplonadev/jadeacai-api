@@ -13,19 +13,23 @@ import (
 )
 
 type testOrderStore struct {
-	order         createOrderRequest
-	created       createdOrder
-	err           error
-	called        bool
-	listResult    paginatedOrders
-	listFilter    orderListFilter
-	listErr       error
-	listCalled    bool
-	updatedID     string
-	updatedStatus string
-	updateErr     error
-	updateFound   bool
-	updateCalled  bool
+	order           createOrderRequest
+	created         createdOrder
+	err             error
+	called          bool
+	listResult      paginatedOrders
+	listFilter      orderListFilter
+	listErr         error
+	listCalled      bool
+	updatedID       string
+	updatedStatus   string
+	updateErr       error
+	updateFound     bool
+	updateCalled    bool
+	dashboard       dashboardData
+	dashboardDate   string
+	dashboardErr    error
+	dashboardCalled bool
 }
 
 func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (createdOrder, error) {
@@ -47,6 +51,12 @@ func (store *testOrderStore) UpdateStatus(_ context.Context, id, status string) 
 	return store.updateFound, store.updateErr
 }
 
+func (store *testOrderStore) Dashboard(_ context.Context, date string) (dashboardData, error) {
+	store.dashboardDate = date
+	store.dashboardCalled = true
+	return store.dashboard, store.dashboardErr
+}
+
 func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
 	if _, err := openOrderStore(""); err == nil {
 		t.Fatal("expected missing DATABASE_URL to fail")
@@ -65,6 +75,53 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if response.Body.String() != `{"status":"ok"}` {
 		t.Fatalf("unexpected response body: %s", response.Body.String())
+	}
+}
+
+func TestAdminDashboardReturnsAggregatesForRequestedDate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	store := &testOrderStore{
+		dashboard: dashboardData{
+			Date:               "2026-09-29",
+			OrdersToday:        3,
+			WaitingPreparation: 1,
+			InProduction:       1,
+			CompletedToday:     1,
+			StatusCounts: []orderStatusCount{
+				{Status: "received", Count: 1},
+				{Status: "preparing", Count: 1},
+				{Status: "completed", Count: 1},
+			},
+			RecentOrders: []dashboardRecentOrder{{
+				ID:                  "order-1",
+				OrderNumber:         3,
+				OrderDate:           "2026-09-29",
+				Status:              "completed",
+				CustomerName:        "Ana Silva",
+				EstimatedTotalCents: 1990,
+			}},
+		},
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/dashboard?date=2026-09-29", nil)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body dashboardData
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.OrdersToday != 3 || body.WaitingPreparation != 1 || body.InProduction != 1 || body.CompletedToday != 1 {
+		t.Fatalf("unexpected dashboard metrics: %+v", body)
+	}
+	if !store.dashboardCalled || body.Date != store.dashboardDate || len(body.RecentOrders) != 1 || body.RecentOrders[0].OrderNumber != 3 {
+		t.Fatalf("unexpected dashboard date/recent orders: %+v", body)
 	}
 }
 
