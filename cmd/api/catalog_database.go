@@ -208,7 +208,7 @@ func (store *postgresOrderStore) CreateCatalogCombo(ctx context.Context, request
 	}
 	defer tx.Rollback()
 
-	if err := validateCatalogReferences(ctx, tx, request.SizeItemID, request.Items); err != nil {
+	if err := validateCatalogReferences(ctx, tx, request.SizeItemID, request.Items, "", nil); err != nil {
 		return catalogComboRecord{}, err
 	}
 	const query = `
@@ -265,6 +265,8 @@ func (store *postgresOrderStore) UpdateCatalogCombo(ctx context.Context, comboID
 		return catalogComboRecord{}, false, err
 	}
 
+	previousSizeItemID := combo.SizeItemID
+	previousItems := combo.Items
 	if request.SizeItemID != nil {
 		combo.SizeItemID = *request.SizeItemID
 	}
@@ -275,7 +277,7 @@ func (store *postgresOrderStore) UpdateCatalogCombo(ctx context.Context, comboID
 	if request.Items != nil {
 		items = *request.Items
 	}
-	if err := validateCatalogReferences(ctx, tx, combo.SizeItemID, items); err != nil {
+	if err := validateCatalogReferences(ctx, tx, combo.SizeItemID, items, previousSizeItemID, previousItems); err != nil {
 		return catalogComboRecord{}, false, err
 	}
 
@@ -445,21 +447,30 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	return combo, nil
 }
 
-func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, sizeItemID string, items []catalogComboItemInput) error {
-	var isActiveSize bool
-	if err := queryer.QueryRowContext(ctx, `
+func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, sizeItemID string, items []catalogComboItemInput, previousSizeItemID string, previousItems []catalogComboItemRecord) error {
+	if sizeItemID != previousSizeItemID {
+		var isActiveSize bool
+		if err := queryer.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM catalog_items
 			WHERE id = $1::uuid AND kind = 'size' AND available AND deleted_at IS NULL
 		)
 	`, sizeItemID).Scan(&isActiveSize); err != nil {
-		return fmt.Errorf("validate combo size: %w", err)
-	}
-	if !isActiveSize {
-		return errCatalogReference
+			return fmt.Errorf("validate combo size: %w", err)
+		}
+		if !isActiveSize {
+			return errCatalogReference
+		}
 	}
 
+	previousItemIDs := make(map[string]struct{}, len(previousItems))
+	for _, item := range previousItems {
+		previousItemIDs[item.ItemID] = struct{}{}
+	}
 	for _, item := range items {
+		if _, wasAlreadyLinked := previousItemIDs[item.ItemID]; wasAlreadyLinked {
+			continue
+		}
 		var isSelectable bool
 		if err := queryer.QueryRowContext(ctx, `
 			SELECT EXISTS (

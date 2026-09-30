@@ -233,6 +233,21 @@ func TestCreateCatalogComboRejectsDuplicateItemSelections(t *testing.T) {
 	}
 }
 
+func TestCatalogComboCanRetainPreviouslyLinkedInactiveItem(t *testing.T) {
+	itemID := "a4f535aa-8c2b-4f0f-9c31-783061cc7201"
+	err := validateCatalogReferences(
+		context.Background(),
+		nil,
+		"a4f535aa-8c2b-4f0f-9c31-783061cc7202",
+		[]catalogComboItemInput{{ItemID: itemID, Quantity: 1}},
+		"a4f535aa-8c2b-4f0f-9c31-783061cc7202",
+		[]catalogComboItemRecord{{ItemID: itemID, Available: false}},
+	)
+	if err != nil {
+		t.Fatalf("expected an existing inactive link to remain valid, got %v", err)
+	}
+}
+
 func TestAdminOrdersReturnsPaginatedOrders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	apiKey := "test-admin-api-key-with-at-least-32-characters"
