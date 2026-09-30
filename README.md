@@ -79,17 +79,17 @@ A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepte
 ## Listagem Admin de pedidos
 
 ```http
-GET /api/v1/admin/orders?status=received&search=Ana&page=1&limit=20
+GET /api/v1/admin/orders?date=2026-09-29&status=received&search=Ana&page=1&limit=20
 Authorization: Bearer <ADMIN_API_KEY>
 ```
 
-Todos os parâmetros são opcionais. A resposta inclui os pedidos mais recentes, os dados enviados no pedido (`orderData`) e paginação (`page`, `limit`, `total`). `limit` aceita de 1 a 100; `search` procura por nome ou telefone. A rota usa a autenticação Admin descrita acima.
+Todos os parâmetros são opcionais. A resposta inclui os pedidos mais recentes, os dados enviados no pedido (`orderData`), o dia comercial (`orderDate`), o número sequencial do dia (`orderNumber`) e paginação (`page`, `limit`, `total`). `limit` aceita de 1 a 100; `search` procura por nome ou telefone. O número reinicia em `1` a cada dia em `America/Sao_Paulo`; o UUID continua como identificador interno. A rota usa a autenticação Admin descrita acima.
 
 Para atualizar uma etapa, use `PATCH /api/v1/admin/orders/{orderId}` com JSON como `{"status":"preparing"}`. Os status aceitos são `received`, `preparing`, `ready`, `out_for_delivery`, `delivered` e `completed`.
 
 ### Configurar Supabase
 
-1. No Supabase, execute as migrations com `npx supabase db push --db-url "$env:DATABASE_URL"` (PowerShell) ou `npx supabase db push --db-url "$DATABASE_URL"` (bash). A migration inicial está em [supabase/migrations/20260929130000_create_orders.sql](supabase/migrations/20260929130000_create_orders.sql).
+1. No Supabase, execute as migrations com `npx supabase db push --db-url "$env:DATABASE_URL"` (PowerShell) ou `npx supabase db push --db-url "$DATABASE_URL"` (bash). A migration inicial cria os pedidos em [supabase/migrations/20260929130000_create_orders.sql](supabase/migrations/20260929130000_create_orders.sql); [supabase/migrations/20260929160000_add_daily_order_numbers.sql](supabase/migrations/20260929160000_add_daily_order_numbers.sql) adiciona e preenche os números diários dos pedidos existentes.
 2. Copie a URI de conexão do projeto e substitua `[YOUR-PASSWORD]` pela senha do banco. Adicione `?sslmode=require` ao final da URI. Se a senha tiver caracteres especiais, use o formato URL-encoded.
 3. Defina `DATABASE_URL` no `.env` local (use [.env.example](.env.example) como referência) e nas Environment Variables do serviço no Render. Nunca coloque essa URI no frontend/Vercel ou no Git.
 4. Reinicie a API local ou faça um novo deploy no Render. A API valida a conexão ao iniciar e não sobe se `DATABASE_URL` estiver ausente ou inválida.

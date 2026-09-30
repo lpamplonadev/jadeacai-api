@@ -14,7 +14,7 @@ import (
 
 type testOrderStore struct {
 	order         createOrderRequest
-	id            string
+	created       createdOrder
 	err           error
 	called        bool
 	listResult    paginatedOrders
@@ -28,10 +28,10 @@ type testOrderStore struct {
 	updateCalled  bool
 }
 
-func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (string, error) {
+func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (createdOrder, error) {
 	store.order = request
 	store.called = true
-	return store.id, store.err
+	return store.created, store.err
 }
 
 func (store *testOrderStore) List(_ context.Context, filter orderListFilter) (paginatedOrders, error) {
@@ -76,6 +76,8 @@ func TestAdminOrdersReturnsPaginatedOrders(t *testing.T) {
 		listResult: paginatedOrders{
 			Orders: []storedOrder{{
 				ID:                  "order-123",
+				OrderNumber:         4,
+				OrderDate:           "2026-09-28",
 				Status:              "received",
 				CustomerName:        "Ana Silva",
 				CustomerPhone:       "21999990000",
@@ -87,7 +89,7 @@ func TestAdminOrdersReturnsPaginatedOrders(t *testing.T) {
 			Total: 21,
 		},
 	}
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=received&search=Ana&page=2&limit=10", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=received&search=Ana&date=2026-09-28&page=2&limit=10", nil)
 	request.Header.Set("Authorization", "Bearer "+apiKey)
 	response := httptest.NewRecorder()
 
@@ -106,7 +108,10 @@ func TestAdminOrdersReturnsPaginatedOrders(t *testing.T) {
 	if body.Orders[0].CustomerName != "Ana Silva" || string(body.Orders[0].OrderData) != `{"notes":"sem granola"}` {
 		t.Fatalf("unexpected order: %+v", body.Orders[0])
 	}
-	if !store.listCalled || store.listFilter != (orderListFilter{Status: "received", Search: "Ana", Page: 2, Limit: 10}) {
+	if body.Orders[0].OrderNumber != 4 || body.Orders[0].OrderDate != "2026-09-28" {
+		t.Fatalf("unexpected daily order number: %+v", body.Orders[0])
+	}
+	if !store.listCalled || store.listFilter != (orderListFilter{Status: "received", Search: "Ana", Date: "2026-09-28", Page: 2, Limit: 10}) {
 		t.Fatalf("unexpected store filter: %+v", store.listFilter)
 	}
 }
@@ -115,7 +120,7 @@ func TestAdminOrdersRejectsInvalidFilters(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	apiKey := "test-admin-api-key-with-at-least-32-characters"
 	t.Setenv("ADMIN_API_KEY", apiKey)
-	for _, query := range []string{"?status=unknown", "?page=0", "?limit=101"} {
+	for _, query := range []string{"?status=unknown", "?page=0", "?limit=101", "?date=2026-02-30"} {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders"+query, nil)
 		request.Header.Set("Authorization", "Bearer "+apiKey)
 		response := httptest.NewRecorder()
@@ -317,7 +322,7 @@ func TestMenuCombosEndpoint(t *testing.T) {
 
 func TestCreateOrderEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	store := &testOrderStore{id: "order-123"}
+	store := &testOrderStore{created: createdOrder{ID: "order-123", OrderNumber: 7, OrderDate: "2026-09-29"}}
 	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"chocolate","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":["nutella"]},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro","complement":"","reference":""},"payment":{"method":"pix","needsChange":false,"changeForCents":0},"notes":"","estimatedTotalCents":1990}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
 	request.Header.Set("Content-Type", "application/json")
@@ -330,14 +335,16 @@ func TestCreateOrderEndpoint(t *testing.T) {
 	}
 
 	var body struct {
-		Status    string `json:"status"`
-		Persisted bool   `json:"persisted"`
-		OrderID   string `json:"orderId"`
+		Status      string `json:"status"`
+		Persisted   bool   `json:"persisted"`
+		OrderID     string `json:"orderId"`
+		OrderNumber int    `json:"orderNumber"`
+		OrderDate   string `json:"orderDate"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Status != "received" || !body.Persisted || body.OrderID != store.id {
+	if body.Status != "received" || !body.Persisted || body.OrderID != store.created.ID || body.OrderNumber != 7 || body.OrderDate != "2026-09-29" {
 		t.Fatalf("unexpected response: %+v", body)
 	}
 	if !store.called || store.order.EstimatedTotalCents != 1990 {

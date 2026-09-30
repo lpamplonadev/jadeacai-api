@@ -55,18 +55,27 @@ type orderPayment struct {
 type orderListFilter struct {
 	Status string
 	Search string
+	Date   string
 	Page   int
 	Limit  int
 }
 
 type storedOrder struct {
 	ID                  string          `json:"id"`
+	OrderNumber         int             `json:"orderNumber"`
+	OrderDate           string          `json:"orderDate"`
 	Status              string          `json:"status"`
 	CustomerName        string          `json:"customerName"`
 	CustomerPhone       string          `json:"customerPhone"`
 	EstimatedTotalCents int             `json:"estimatedTotalCents"`
 	OrderData           json.RawMessage `json:"orderData"`
 	CreatedAt           time.Time       `json:"createdAt"`
+}
+
+type createdOrder struct {
+	ID          string
+	OrderNumber int
+	OrderDate   string
 }
 
 type paginatedOrders struct {
@@ -104,10 +113,18 @@ func listOrders(store orderStore) gin.HandlerFunc {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "search is too long"})
 			return
 		}
+		date := context.Query("date")
+		if date != "" {
+			if _, err := time.Parse("2006-01-02", date); err != nil {
+				context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order date"})
+				return
+			}
+		}
 
 		result, err := store.List(context.Request.Context(), orderListFilter{
 			Status: status,
 			Search: search,
+			Date:   date,
 			Page:   page,
 			Limit:  limit,
 		})
@@ -187,7 +204,7 @@ func createOrder(store orderStore) gin.HandlerFunc {
 			return
 		}
 
-		orderID, err := store.Create(context.Request.Context(), request)
+		created, err := store.Create(context.Request.Context(), request)
 		if err != nil {
 			log.Printf("persist order: %v", err)
 			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not persist order"})
@@ -195,9 +212,11 @@ func createOrder(store orderStore) gin.HandlerFunc {
 		}
 
 		context.JSON(http.StatusAccepted, gin.H{
-			"status":    "received",
-			"persisted": true,
-			"orderId":   orderID,
+			"status":      "received",
+			"persisted":   true,
+			"orderId":     created.ID,
+			"orderNumber": created.OrderNumber,
+			"orderDate":   created.OrderDate,
 		})
 	}
 }

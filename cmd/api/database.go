@@ -13,7 +13,7 @@ import (
 )
 
 type orderStore interface {
-	Create(context.Context, createOrderRequest) (string, error)
+	Create(context.Context, createOrderRequest) (createdOrder, error)
 	List(context.Context, orderListFilter) (paginatedOrders, error)
 	UpdateStatus(context.Context, string, string) (bool, error)
 }
@@ -56,37 +56,63 @@ func openOrderStore(connectionString string) (*postgresOrderStore, error) {
 	return &postgresOrderStore{db: db}, nil
 }
 
-func (store *postgresOrderStore) Create(ctx context.Context, request createOrderRequest) (string, error) {
+func (store *postgresOrderStore) Create(ctx context.Context, request createOrderRequest) (createdOrder, error) {
 	orderData, err := json.Marshal(request)
 	if err != nil {
-		return "", fmt.Errorf("encode order: %w", err)
+		return createdOrder{}, fmt.Errorf("encode order: %w", err)
+	}
+
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return createdOrder{}, fmt.Errorf("begin order transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	created := createdOrder{}
+	if err := tx.QueryRowContext(ctx, `SELECT to_char((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD')`).Scan(&created.OrderDate); err != nil {
+		return createdOrder{}, fmt.Errorf("get business date: %w", err)
+	}
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO order_daily_counters (order_date, last_number)
+		VALUES ($1::date, 1)
+		ON CONFLICT (order_date) DO UPDATE
+		SET last_number = order_daily_counters.last_number + 1
+		RETURNING last_number
+	`, created.OrderDate).Scan(&created.OrderNumber); err != nil {
+		return createdOrder{}, fmt.Errorf("allocate daily order number: %w", err)
 	}
 
 	const query = `
 		INSERT INTO orders (
+			order_date,
+			order_number,
 			customer_name,
 			customer_phone,
 			estimated_total_cents,
 			order_data
 		)
-		VALUES ($1, $2, $3, $4::jsonb)
+		VALUES ($1::date, $2, $3, $4, $5, $6::jsonb)
 		RETURNING id::text
 	`
 
-	var orderID string
-	err = store.db.QueryRowContext(
+	err = tx.QueryRowContext(
 		ctx,
 		query,
+		created.OrderDate,
+		created.OrderNumber,
 		request.Customer.Name,
 		request.Customer.Phone,
 		request.EstimatedTotalCents,
 		orderData,
-	).Scan(&orderID)
+	).Scan(&created.ID)
 	if err != nil {
-		return "", fmt.Errorf("insert order: %w", err)
+		return createdOrder{}, fmt.Errorf("insert order: %w", err)
 	}
 
-	return orderID, nil
+	if err := tx.Commit(); err != nil {
+		return createdOrder{}, fmt.Errorf("commit order: %w", err)
+	}
+	return created, nil
 }
 
 func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilter) (paginatedOrders, error) {
@@ -95,26 +121,32 @@ func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilte
 		FROM orders
 		WHERE ($1 = '' OR status = $1)
 			AND ($2 = '' OR customer_name ILIKE '%' || $2 || '%' OR customer_phone LIKE '%' || $2 || '%')
+			AND ($3::date IS NULL OR order_date = $3::date)
 	`
+	var filterDate any
+	if filter.Date != "" {
+		filterDate = filter.Date
+	}
 
 	result := paginatedOrders{
 		Orders: make([]storedOrder, 0, filter.Limit),
 		Page:   filter.Page,
 		Limit:  filter.Limit,
 	}
-	if err := store.db.QueryRowContext(ctx, countQuery, filter.Status, filter.Search).Scan(&result.Total); err != nil {
+	if err := store.db.QueryRowContext(ctx, countQuery, filter.Status, filter.Search, filterDate).Scan(&result.Total); err != nil {
 		return paginatedOrders{}, fmt.Errorf("count orders: %w", err)
 	}
 
 	const listQuery = `
-		SELECT id::text, status, customer_name, customer_phone, estimated_total_cents, order_data, created_at
+		SELECT id::text, order_number, to_char(order_date, 'YYYY-MM-DD'), status, customer_name, customer_phone, estimated_total_cents, order_data, created_at
 		FROM orders
 		WHERE ($1 = '' OR status = $1)
 			AND ($2 = '' OR customer_name ILIKE '%' || $2 || '%' OR customer_phone LIKE '%' || $2 || '%')
-		ORDER BY created_at DESC, id DESC
-		LIMIT $3 OFFSET $4
+			AND ($3::date IS NULL OR order_date = $3::date)
+		ORDER BY order_date DESC, order_number DESC
+		LIMIT $4 OFFSET $5
 	`
-	rows, err := store.db.QueryContext(ctx, listQuery, filter.Status, filter.Search, filter.Limit, (filter.Page-1)*filter.Limit)
+	rows, err := store.db.QueryContext(ctx, listQuery, filter.Status, filter.Search, filterDate, filter.Limit, (filter.Page-1)*filter.Limit)
 	if err != nil {
 		return paginatedOrders{}, fmt.Errorf("query orders: %w", err)
 	}
@@ -125,6 +157,8 @@ func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilte
 		var orderData []byte
 		if err := rows.Scan(
 			&order.ID,
+			&order.OrderNumber,
+			&order.OrderDate,
 			&order.Status,
 			&order.CustomerName,
 			&order.CustomerPhone,
