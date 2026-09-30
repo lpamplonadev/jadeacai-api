@@ -474,17 +474,31 @@ func TestCORSDoesNotAllowUnlistedOrigin(t *testing.T) {
 
 func TestMenuCombosEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{catalog: catalogData{
+		Items: []catalogItemRecord{
+			{ID: "size-300-id", ItemKey: "size-300", Kind: "size", Name: "300 ml", Available: true},
+			{ID: "size-500-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Available: true},
+			{ID: "size-770-id", ItemKey: "size-770", Kind: "size", Name: "770 ml", Available: true},
+			{ID: "size-1000-id", ItemKey: "size-1000", Kind: "size", Name: "Marmita", Available: true},
+		},
+		Combos: []catalogComboRecord{
+			{ID: "combo-300-id", ComboKey: "combo-300", Name: "Combo 300 ml", SizeItemID: "size-300-id", SizeName: "300 ml", PriceCents: 1290, IncludedToppings: 3, IncludedExtras: 1, Available: true},
+			{ID: "combo-500-id", ComboKey: "combo-500", Name: "Combo 500 ml", SizeItemID: "size-500-id", SizeName: "500 ml", PriceCents: 1690, IncludedToppings: 3, IncludedFruits: 1, IncludedExtras: 1, Available: true},
+			{ID: "combo-770-id", ComboKey: "combo-770", Name: "Combo 770 ml", SizeItemID: "size-770-id", SizeName: "770 ml", PriceCents: 1990, IncludedToppings: 5, IncludedFruits: 1, IncludedExtras: 1, Available: true},
+			{ID: "combo-marmita-id", ComboKey: "combo-marmita", Name: "Combo Marmita", SizeItemID: "size-1000-id", SizeName: "Marmita", PriceCents: 2890, IncludedToppings: 6, IncludedFruits: 2, IncludedExtras: 1, Available: true},
+		},
+	}}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/combos", nil)
 	response := httptest.NewRecorder()
 
-	newRouter(nil).ServeHTTP(response, request)
+	newRouter(store).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
 	}
 
 	var body struct {
-		Combos []menuCombo `json:"combos"`
+		Combos []publicMenuCombo `json:"combos"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -492,12 +506,51 @@ func TestMenuCombosEndpoint(t *testing.T) {
 	if len(body.Combos) != 4 {
 		t.Fatalf("expected 4 combos, got %d", len(body.Combos))
 	}
-	if body.Combos[0].ID != "combo-300" || body.Combos[0].PriceCents != 1290 {
+	if body.Combos[0].Key != "combo-300" || body.Combos[0].PriceCents != 1290 {
 		t.Errorf("unexpected first combo: %+v", body.Combos[0])
 	}
-	if body.Combos[3].ID != "combo-marmita" || body.Combos[3].PriceCents != 2890 {
+	if body.Combos[3].Key != "combo-marmita" || body.Combos[3].PriceCents != 2890 {
 		t.Errorf("unexpected last combo: %+v", body.Combos[3])
 	}
+}
+
+func TestPublicMenuCatalogExcludesUnavailableRecords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{catalog: catalogData{
+		Items: []catalogItemRecord{
+			{ID: "size-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Available: true},
+			{ID: "active-item-id", ItemKey: "topping-pacoca", Kind: "topping", Name: "Paçoca", Available: true},
+			{ID: "paused-item-id", ItemKey: "topping-paused", Kind: "topping", Name: "Pausado", Available: false},
+			{ID: "archived-item-id", ItemKey: "topping-archived", Kind: "topping", Name: "Arquivado", Available: false, DeletedAt: ptr("2026-09-29T12:00:00Z")},
+		},
+		Combos: []catalogComboRecord{
+			{ID: "active-combo-id", ComboKey: "combo-active", Name: "Combo ativo", SizeItemID: "size-id", SizeName: "500 ml", Available: true},
+			{ID: "paused-combo-id", ComboKey: "combo-paused", Name: "Combo pausado", SizeItemID: "size-id", SizeName: "500 ml", Available: false},
+		},
+		Rules: []catalogRuleRecord{{Key: "delivery_fee_cents", Value: float64(300)}},
+	}}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/catalog", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	var body publicMenuCatalog
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 2 || len(body.Combos) != 1 || body.Combos[0].Key != "combo-active" {
+		t.Fatalf("public catalog included unavailable records: %+v", body)
+	}
+	if body.Rules["delivery_fee_cents"] != float64(300) {
+		t.Fatalf("unexpected public rules: %+v", body.Rules)
+	}
+}
+
+func ptr(value string) *string {
+	return &value
 }
 
 func TestCreateOrderEndpoint(t *testing.T) {
@@ -529,6 +582,24 @@ func TestCreateOrderEndpoint(t *testing.T) {
 	}
 	if !store.called || store.order.EstimatedTotalCents != 1990 {
 		t.Fatalf("expected order to be persisted, got %+v", store)
+	}
+}
+
+func TestCreateOrderAcceptsMultipleCartItems(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{created: createdOrder{ID: "order-456", OrderNumber: 8, OrderDate: "2026-09-30"}}
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500"},"items":[{"id":"line-1","name":"Combo 500 ml","description":"Açaí de banana · 500 ml · Paçoca","acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"none","condimentPositionId":"bottom","fruitIds":[],"extraIds":[]},"estimatedSubtotalCents":1690},{"id":"line-2","name":"Açaí livre 300 ml","description":"Açaí de morango · 300 ml · Banana","acai":{"flavorId":"morango","sizeId":"300","comboId":"","toppingIds":[],"sauceId":"chocolate","condimentPositionId":"top","fruitIds":["banana"],"extraIds":[]},"estimatedSubtotalCents":1390}],"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro"},"payment":{"method":"pix"},"notes":"","estimatedTotalCents":3380}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, response.Code, response.Body.String())
+	}
+	if !store.called || len(store.order.Items) != 2 || store.order.Items[1].Name != "Açaí livre 300 ml" || store.order.Items[1].Description != "Açaí de morango · 300 ml · Banana" {
+		t.Fatalf("expected both cart items to be persisted, got %+v", store.order.Items)
 	}
 }
 

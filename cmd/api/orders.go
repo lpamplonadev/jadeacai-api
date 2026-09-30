@@ -13,12 +13,21 @@ import (
 )
 
 type createOrderRequest struct {
-	Customer            orderCustomer `json:"customer"`
-	Acai                orderAcai     `json:"acai"`
-	Delivery            orderDelivery `json:"delivery"`
-	Payment             orderPayment  `json:"payment"`
-	Notes               string        `json:"notes"`
-	EstimatedTotalCents int           `json:"estimatedTotalCents" binding:"required,gt=0"`
+	Customer            orderCustomer      `json:"customer"`
+	Acai                orderAcai          `json:"acai"`
+	Items               []orderLineRequest `json:"items,omitempty" binding:"max=20,dive"`
+	Delivery            orderDelivery      `json:"delivery"`
+	Payment             orderPayment       `json:"payment"`
+	Notes               string             `json:"notes"`
+	EstimatedTotalCents int                `json:"estimatedTotalCents" binding:"required,gt=0"`
+}
+
+type orderLineRequest struct {
+	ID                     string    `json:"id" binding:"required"`
+	Name                   string    `json:"name" binding:"required"`
+	Description            string    `json:"description"`
+	Acai                   orderAcai `json:"acai"`
+	EstimatedSubtotalCents int       `json:"estimatedSubtotalCents" binding:"required,gt=0"`
 }
 
 type orderCustomer struct {
@@ -256,6 +265,12 @@ func createOrder(store orderStore) gin.HandlerFunc {
 		if err := context.ShouldBindJSON(&request); err != nil {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order payload"})
 			return
+		}
+		for _, item := range request.Items {
+			if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.Name) == "" {
+				context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order item"})
+				return
+			}
 		}
 
 		created, err := store.Create(context.Request.Context(), request)

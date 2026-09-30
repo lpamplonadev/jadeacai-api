@@ -72,7 +72,7 @@ POST /api/v1/orders
 Content-Type: application/json
 ```
 
-O JSON deve conter `customer` (`name`, `phone`), `acai` (`flavorId`, `sizeId`, `comboId` opcional, `toppingIds`, `sauceId`, `condimentPositionId`, `fruitIds`, `extraIds`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents`.
+O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 20 configurações no mesmo pedido.
 
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
