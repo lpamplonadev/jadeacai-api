@@ -96,9 +96,13 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 `date` é opcional; por padrão a API usa o dia atual em `America/Sao_Paulo`. A resposta contém os totais do dia, contagens por status (`statusCounts`) e até cinco pedidos recentes (`recentOrders`). A rota usa a autenticação Admin descrita acima.
 
+## Modelo do catálogo
+
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais do frontend. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. Os endpoints CRUD e a conexão da tela Admin serão adicionados na próxima etapa.
+
 ### Configurar Supabase
 
-1. No Supabase, execute as migrations com `npx supabase db push --db-url "$env:DATABASE_URL"` (PowerShell) ou `npx supabase db push --db-url "$DATABASE_URL"` (bash). A migration inicial cria os pedidos em [supabase/migrations/20260929130000_create_orders.sql](supabase/migrations/20260929130000_create_orders.sql); [supabase/migrations/20260929160000_add_daily_order_numbers.sql](supabase/migrations/20260929160000_add_daily_order_numbers.sql) adiciona e preenche os números diários dos pedidos existentes.
+1. No Supabase, execute as migrations com `npx supabase db push --db-url "$env:DATABASE_URL"` (PowerShell) ou `npx supabase db push --db-url "$DATABASE_URL"` (bash). Elas criam pedidos, numeração diária e o catálogo inicial; as migrations estão em `supabase/migrations/`.
 2. Copie a URI de conexão do projeto e substitua `[YOUR-PASSWORD]` pela senha do banco. Adicione `?sslmode=require` ao final da URI. Se a senha tiver caracteres especiais, use o formato URL-encoded.
 3. Defina `DATABASE_URL` no `.env` local (use [.env.example](.env.example) como referência) e nas Environment Variables do serviço no Render. Nunca coloque essa URI no frontend/Vercel ou no Git.
 4. Reinicie a API local ou faça um novo deploy no Render. A API valida a conexão ao iniciar e não sobe se `DATABASE_URL` estiver ausente ou inválida.
