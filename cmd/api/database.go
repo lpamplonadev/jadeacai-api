@@ -17,6 +17,13 @@ type orderStore interface {
 	List(context.Context, orderListFilter) (paginatedOrders, error)
 	Dashboard(context.Context, string) (dashboardData, error)
 	UpdateStatus(context.Context, string, string) (bool, error)
+	Catalog(context.Context) (catalogData, error)
+	CreateCatalogItem(context.Context, createCatalogItemRequest, string, bool) (catalogItemRecord, error)
+	UpdateCatalogItem(context.Context, string, updateCatalogItemRequest) (catalogItemRecord, bool, error)
+	ArchiveCatalogItem(context.Context, string) (bool, error)
+	CreateCatalogCombo(context.Context, createCatalogComboRequest, string, bool) (catalogComboRecord, error)
+	UpdateCatalogCombo(context.Context, string, updateCatalogComboRequest) (catalogComboRecord, bool, error)
+	ArchiveCatalogCombo(context.Context, string) (bool, error)
 }
 
 type postgresOrderStore struct {

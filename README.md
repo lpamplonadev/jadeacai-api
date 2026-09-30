@@ -98,7 +98,19 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 ## Modelo do catálogo
 
-A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais do frontend. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. Os endpoints CRUD e a conexão da tela Admin serão adicionados na próxima etapa.
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais do frontend. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. As rotas protegidas de CRUD estão descritas abaixo; a próxima etapa conecta a tela Admin e o menu público.
+
+### Rotas administrativas do catálogo
+
+Todas exigem `Authorization: Bearer <ADMIN_API_KEY>`:
+
+- `GET /api/v1/admin/catalog`: itens, combos, componentes de cada combo e regras comerciais.
+- `POST /api/v1/admin/catalog/items`: cria flavor, size, topping, sauce, condiment position, fruit ou extra.
+- `PATCH /api/v1/admin/catalog/items/{itemId}`: altera nome, preço, ordem ou disponibilidade.
+- `DELETE /api/v1/admin/catalog/items/{itemId}`: arquiva o item sem apagar referências.
+- `POST /api/v1/admin/catalog/combos`: cria combo vinculando IDs de tamanho e itens existentes.
+- `PATCH /api/v1/admin/catalog/combos/{comboId}`: altera dados ou substitui os itens vinculados.
+- `DELETE /api/v1/admin/catalog/combos/{comboId}`: arquiva o combo.
 
 ### Configurar Supabase
 

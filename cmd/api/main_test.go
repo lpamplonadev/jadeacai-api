@@ -30,6 +30,15 @@ type testOrderStore struct {
 	dashboardDate   string
 	dashboardErr    error
 	dashboardCalled bool
+	catalog         catalogData
+	createdItem     catalogItemRecord
+	updatedItem     catalogItemRecord
+	itemFound       bool
+	itemArchived    bool
+	createdCombo    catalogComboRecord
+	updatedCombo    catalogComboRecord
+	comboFound      bool
+	comboArchived   bool
 }
 
 func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (createdOrder, error) {
@@ -55,6 +64,34 @@ func (store *testOrderStore) Dashboard(_ context.Context, date string) (dashboar
 	store.dashboardDate = date
 	store.dashboardCalled = true
 	return store.dashboard, store.dashboardErr
+}
+
+func (store *testOrderStore) Catalog(_ context.Context) (catalogData, error) {
+	return store.catalog, nil
+}
+
+func (store *testOrderStore) CreateCatalogItem(_ context.Context, _ createCatalogItemRequest, _ string, _ bool) (catalogItemRecord, error) {
+	return store.createdItem, nil
+}
+
+func (store *testOrderStore) UpdateCatalogItem(_ context.Context, _ string, _ updateCatalogItemRequest) (catalogItemRecord, bool, error) {
+	return store.updatedItem, store.itemFound, nil
+}
+
+func (store *testOrderStore) ArchiveCatalogItem(_ context.Context, _ string) (bool, error) {
+	return store.itemArchived, nil
+}
+
+func (store *testOrderStore) CreateCatalogCombo(_ context.Context, _ createCatalogComboRequest, _ string, _ bool) (catalogComboRecord, error) {
+	return store.createdCombo, nil
+}
+
+func (store *testOrderStore) UpdateCatalogCombo(_ context.Context, _ string, _ updateCatalogComboRequest) (catalogComboRecord, bool, error) {
+	return store.updatedCombo, store.comboFound, nil
+}
+
+func (store *testOrderStore) ArchiveCatalogCombo(_ context.Context, _ string) (bool, error) {
+	return store.comboArchived, nil
 }
 
 func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
@@ -122,6 +159,77 @@ func TestAdminDashboardReturnsAggregatesForRequestedDate(t *testing.T) {
 	}
 	if !store.dashboardCalled || body.Date != store.dashboardDate || len(body.RecentOrders) != 1 || body.RecentOrders[0].OrderNumber != 3 {
 		t.Fatalf("unexpected dashboard date/recent orders: %+v", body)
+	}
+}
+
+func TestAdminCatalogReturnsItemsCombosAndRules(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	store := &testOrderStore{catalog: catalogData{
+		Items:  []catalogItemRecord{{ID: "item-1", ItemKey: "topping-pacoca", Kind: "topping", Name: "Paçoca", PriceCents: 100, Available: true}},
+		Combos: []catalogComboRecord{{ID: "combo-1", ComboKey: "combo-special", Name: "Combo Especial", Items: []catalogComboItemRecord{{ItemID: "item-1", Name: "Paçoca", Quantity: 1}}}},
+		Rules:  []catalogRuleRecord{{Key: "delivery_fee_cents", Value: float64(300)}},
+	}}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/catalog", nil)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	var body catalogData
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 1 || len(body.Combos) != 1 || len(body.Combos[0].Items) != 1 || len(body.Rules) != 1 {
+		t.Fatalf("unexpected catalog response: %+v", body)
+	}
+}
+
+func TestCreateCatalogItemValidatesAndReturnsItem(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	store := &testOrderStore{createdItem: catalogItemRecord{
+		ID: "item-1", ItemKey: "topping-new-item", Kind: "topping", Name: "Leite Ninho", PriceCents: 150, Available: true,
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/catalog/items", strings.NewReader(`{"kind":"topping","name":" Leite Ninho ","priceCents":150,"sortOrder":10}`))
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	var body catalogItemRecord
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Name != "Leite Ninho" || body.PriceCents != 150 || !strings.HasPrefix(body.ItemKey, "topping-") {
+		t.Fatalf("unexpected catalog item response: %+v", body)
+	}
+}
+
+func TestCreateCatalogComboRejectsDuplicateItemSelections(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	itemID := "a4f535aa-8c2b-4f0f-9c31-783061cc7201"
+	requestBody := `{"name":"Combo Paçoca","sizeItemId":"a4f535aa-8c2b-4f0f-9c31-783061cc7202","priceCents":1990,"items":[{"itemId":"` + itemID + `","quantity":1},{"itemId":"` + itemID + `","quantity":1}]}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/catalog/combos", strings.NewReader(requestBody))
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(&testOrderStore{}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
 	}
 }
 

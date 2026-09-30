@@ -56,6 +56,13 @@ func newRouter(store orderStore) *gin.Engine {
 	adminRoutes.GET("/dashboard", getDashboard(store))
 	adminRoutes.GET("/orders", listOrders(store))
 	adminRoutes.PATCH("/orders/:orderId", updateOrderStatus(store))
+	adminRoutes.GET("/catalog", getCatalog(store))
+	adminRoutes.POST("/catalog/items", createCatalogItem(store))
+	adminRoutes.PATCH("/catalog/items/:itemId", updateCatalogItem(store))
+	adminRoutes.DELETE("/catalog/items/:itemId", archiveCatalogItem(store))
+	adminRoutes.POST("/catalog/combos", createCatalogCombo(store))
+	adminRoutes.PATCH("/catalog/combos/:comboId", updateCatalogCombo(store))
+	adminRoutes.DELETE("/catalog/combos/:comboId", archiveCatalogCombo(store))
 
 	return router
 }
