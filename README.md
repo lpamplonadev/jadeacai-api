@@ -76,6 +76,15 @@ O JSON deve conter `customer` (`name`, `phone`), `acai` (`flavorId`, `sizeId`, `
 
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"..."}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
+## Listagem Admin de pedidos
+
+```http
+GET /api/v1/admin/orders?status=received&search=Ana&page=1&limit=20
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
+Todos os parâmetros são opcionais. A resposta inclui os pedidos mais recentes, os dados enviados no pedido (`orderData`) e paginação (`page`, `limit`, `total`). `limit` aceita de 1 a 100; `search` procura por nome ou telefone. A rota usa a autenticação Admin descrita acima.
+
 ### Configurar Supabase
 
 1. No Supabase, execute as migrations com `npx supabase db push --db-url "$env:DATABASE_URL"` (PowerShell) ou `npx supabase db push --db-url "$DATABASE_URL"` (bash). A migration inicial está em [supabase/migrations/20260929130000_create_orders.sql](supabase/migrations/20260929130000_create_orders.sql).

@@ -53,6 +53,7 @@ func newRouter(store orderStore) *gin.Engine {
 	adminRoutes.GET("/health", func(context *gin.Context) {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
+	adminRoutes.GET("/orders", listOrders(store))
 
 	return router
 }

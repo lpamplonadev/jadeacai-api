@@ -13,16 +13,26 @@ import (
 )
 
 type testOrderStore struct {
-	order  createOrderRequest
-	id     string
-	err    error
-	called bool
+	order      createOrderRequest
+	id         string
+	err        error
+	called     bool
+	listResult paginatedOrders
+	listFilter orderListFilter
+	listErr    error
+	listCalled bool
 }
 
 func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (string, error) {
 	store.order = request
 	store.called = true
 	return store.id, store.err
+}
+
+func (store *testOrderStore) List(_ context.Context, filter orderListFilter) (paginatedOrders, error) {
+	store.listFilter = filter
+	store.listCalled = true
+	return store.listResult, store.listErr
 }
 
 func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
@@ -43,6 +53,70 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if response.Body.String() != `{"status":"ok"}` {
 		t.Fatalf("unexpected response body: %s", response.Body.String())
+	}
+}
+
+func TestAdminOrdersReturnsPaginatedOrders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	store := &testOrderStore{
+		listResult: paginatedOrders{
+			Orders: []storedOrder{{
+				ID:                  "order-123",
+				Status:              "received",
+				CustomerName:        "Ana Silva",
+				CustomerPhone:       "21999990000",
+				EstimatedTotalCents: 1990,
+				OrderData:           json.RawMessage(`{"notes":"sem granola"}`),
+			}},
+			Page:  2,
+			Limit: 10,
+			Total: 21,
+		},
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=received&search=Ana&page=2&limit=10", nil)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body paginatedOrders
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Total != 21 || body.Page != 2 || body.Limit != 10 || len(body.Orders) != 1 {
+		t.Fatalf("unexpected list response: %+v", body)
+	}
+	if body.Orders[0].CustomerName != "Ana Silva" || string(body.Orders[0].OrderData) != `{"notes":"sem granola"}` {
+		t.Fatalf("unexpected order: %+v", body.Orders[0])
+	}
+	if !store.listCalled || store.listFilter != (orderListFilter{Status: "received", Search: "Ana", Page: 2, Limit: 10}) {
+		t.Fatalf("unexpected store filter: %+v", store.listFilter)
+	}
+}
+
+func TestAdminOrdersRejectsInvalidFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	for _, query := range []string{"?status=unknown", "?page=0", "?limit=101"} {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders"+query, nil)
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+		response := httptest.NewRecorder()
+		store := &testOrderStore{}
+
+		newRouter(store).ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d for %s, got %d", http.StatusBadRequest, query, response.Code)
+		}
+		if store.listCalled {
+			t.Errorf("store should not be called for invalid filter %s", query)
+		}
 	}
 }
 

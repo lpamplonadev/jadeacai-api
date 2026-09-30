@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -45,6 +49,92 @@ type orderPayment struct {
 	Method         string `json:"method" binding:"required,oneof=pix cash card"`
 	NeedsChange    bool   `json:"needsChange"`
 	ChangeForCents int    `json:"changeForCents" binding:"gte=0"`
+}
+
+type orderListFilter struct {
+	Status string
+	Search string
+	Page   int
+	Limit  int
+}
+
+type storedOrder struct {
+	ID                  string          `json:"id"`
+	Status              string          `json:"status"`
+	CustomerName        string          `json:"customerName"`
+	CustomerPhone       string          `json:"customerPhone"`
+	EstimatedTotalCents int             `json:"estimatedTotalCents"`
+	OrderData           json.RawMessage `json:"orderData"`
+	CreatedAt           time.Time       `json:"createdAt"`
+}
+
+type paginatedOrders struct {
+	Orders []storedOrder `json:"orders"`
+	Page   int           `json:"page"`
+	Limit  int           `json:"limit"`
+	Total  int64         `json:"total"`
+}
+
+func listOrders(store orderStore) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		status := context.Query("status")
+		if status != "" && !isValidOrderStatus(status) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order status"})
+			return
+		}
+
+		page, ok := parsePositiveQuery(context.Query("page"), 1, 1_000_000)
+		if !ok {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid page"})
+			return
+		}
+		limit, ok := parsePositiveQuery(context.Query("limit"), 20, 100)
+		if !ok {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+			return
+		}
+
+		search := strings.TrimSpace(context.Query("search"))
+		if len(search) > 100 {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "search is too long"})
+			return
+		}
+
+		result, err := store.List(context.Request.Context(), orderListFilter{
+			Status: status,
+			Search: search,
+			Page:   page,
+			Limit:  limit,
+		})
+		if err != nil {
+			log.Printf("list orders: %v", err)
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not list orders"})
+			return
+		}
+
+		context.JSON(http.StatusOK, result)
+	}
+}
+
+func parsePositiveQuery(raw string, fallback, maximum int) (int, bool) {
+	if raw == "" {
+		return fallback, true
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 || value > maximum {
+		return 0, false
+	}
+	return value, true
+}
+
+func isValidOrderStatus(status string) bool {
+	switch status {
+	case "received", "preparing", "ready", "out_for_delivery", "delivered", "completed":
+		return true
+	default:
+		return false
+	}
 }
 
 func createOrder(store orderStore) gin.HandlerFunc {

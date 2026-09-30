@@ -14,6 +14,7 @@ import (
 
 type orderStore interface {
 	Create(context.Context, createOrderRequest) (string, error)
+	List(context.Context, orderListFilter) (paginatedOrders, error)
 }
 
 type postgresOrderStore struct {
@@ -85,6 +86,61 @@ func (store *postgresOrderStore) Create(ctx context.Context, request createOrder
 	}
 
 	return orderID, nil
+}
+
+func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilter) (paginatedOrders, error) {
+	const countQuery = `
+		SELECT COUNT(*)
+		FROM orders
+		WHERE ($1 = '' OR status = $1)
+			AND ($2 = '' OR customer_name ILIKE '%' || $2 || '%' OR customer_phone LIKE '%' || $2 || '%')
+	`
+
+	result := paginatedOrders{
+		Orders: make([]storedOrder, 0, filter.Limit),
+		Page:   filter.Page,
+		Limit:  filter.Limit,
+	}
+	if err := store.db.QueryRowContext(ctx, countQuery, filter.Status, filter.Search).Scan(&result.Total); err != nil {
+		return paginatedOrders{}, fmt.Errorf("count orders: %w", err)
+	}
+
+	const listQuery = `
+		SELECT id::text, status, customer_name, customer_phone, estimated_total_cents, order_data, created_at
+		FROM orders
+		WHERE ($1 = '' OR status = $1)
+			AND ($2 = '' OR customer_name ILIKE '%' || $2 || '%' OR customer_phone LIKE '%' || $2 || '%')
+		ORDER BY created_at DESC, id DESC
+		LIMIT $3 OFFSET $4
+	`
+	rows, err := store.db.QueryContext(ctx, listQuery, filter.Status, filter.Search, filter.Limit, (filter.Page-1)*filter.Limit)
+	if err != nil {
+		return paginatedOrders{}, fmt.Errorf("query orders: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var order storedOrder
+		var orderData []byte
+		if err := rows.Scan(
+			&order.ID,
+			&order.Status,
+			&order.CustomerName,
+			&order.CustomerPhone,
+			&order.EstimatedTotalCents,
+			&orderData,
+			&order.CreatedAt,
+		); err != nil {
+			return paginatedOrders{}, fmt.Errorf("scan order: %w", err)
+		}
+		order.OrderData = json.RawMessage(orderData)
+		result.Orders = append(result.Orders, order)
+	}
+	if err := rows.Err(); err != nil {
+		return paginatedOrders{}, fmt.Errorf("iterate orders: %w", err)
+	}
+
+	return result, nil
 }
 
 func (store *postgresOrderStore) Close() {
