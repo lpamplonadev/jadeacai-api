@@ -48,6 +48,12 @@ func newRouter(store orderStore) *gin.Engine {
 	router.GET("/api/v1/menu/combos", getMenuCombos)
 	router.POST("/api/v1/orders", createOrder(store))
 
+	adminRoutes := router.Group("/api/v1/admin")
+	adminRoutes.Use(adminAPIKeyAuth(os.Getenv("ADMIN_API_KEY")))
+	adminRoutes.GET("/health", func(context *gin.Context) {
+		context.JSON(200, gin.H{"status": "ok"})
+	})
+
 	return router
 }
 

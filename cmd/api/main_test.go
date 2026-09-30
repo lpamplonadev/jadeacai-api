@@ -46,6 +46,48 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestAdminHealthRequiresConfiguredAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ADMIN_API_KEY", "")
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/health", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d when API key is missing, got %d", http.StatusServiceUnavailable, response.Code)
+	}
+}
+
+func TestAdminHealthRejectsInvalidAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ADMIN_API_KEY", "test-admin-api-key-with-at-least-32-characters")
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/health", nil)
+	request.Header.Set("Authorization", "Bearer incorrect-key")
+	response := httptest.NewRecorder()
+
+	newRouter(nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, response.Code)
+	}
+}
+
+func TestAdminHealthAcceptsMatchingAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/health", nil)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response := httptest.NewRecorder()
+
+	newRouter(nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+}
+
 func TestCORSPreflightForLocalFrontend(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
