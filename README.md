@@ -42,13 +42,19 @@ Resposta esperada:
 { "status": "ok" }
 ```
 
-## Catálogo de combos
+## Cardápio público
+
+```http
+GET /api/v1/menu/catalog
+```
+
+A API retorna itens e combos ativos do PostgreSQL, além das regras comerciais usadas pelo configurador. Itens ou combos pausados (`available: false`) ou arquivados não aparecem no menu público. `GET /api/v1/menu/combos` permanece disponível por compatibilidade e retorna somente os combos ativos.
 
 ```http
 GET /api/v1/menu/combos
 ```
 
-A resposta contém os combos atuais, suas inclusões e preços em centavos (`priceCents`). Esses dados refletem o catálogo do frontend no momento da implementação e ainda precisam de confirmação comercial; o frontend ainda não consome este endpoint.
+A resposta contém `{ "combos": [...] }`, com preços em centavos (`priceCents`) e IDs estáveis do catálogo.
 
 ## CORS
 
@@ -72,7 +78,7 @@ POST /api/v1/orders
 Content-Type: application/json
 ```
 
-O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 20 configurações no mesmo pedido.
+O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 20 configurações no mesmo pedido; cada linha representa um açaí montado, não um produto avulso.
 
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
@@ -98,7 +104,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 ## Modelo do catálogo
 
-A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais do frontend. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. As rotas protegidas de CRUD estão descritas abaixo; a próxima etapa conecta a tela Admin e o menu público.
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
 
 ### Rotas administrativas do catálogo
 
