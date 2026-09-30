@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -75,6 +76,10 @@ type paginatedOrders struct {
 	Total  int64         `json:"total"`
 }
 
+type updateOrderStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
 func listOrders(store orderStore) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		status := context.Query("status")
@@ -135,6 +140,43 @@ func isValidOrderStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func updateOrderStatus(store orderStore) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		orderID := context.Param("orderId")
+		if !isValidUUID(orderID) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order id"})
+			return
+		}
+
+		var request updateOrderStatusRequest
+		if err := context.ShouldBindJSON(&request); err != nil || !isValidOrderStatus(request.Status) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order status"})
+			return
+		}
+
+		updated, err := store.UpdateStatus(context.Request.Context(), orderID, request.Status)
+		if err != nil {
+			log.Printf("update order status: %v", err)
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not update order status"})
+			return
+		}
+		if !updated {
+			context.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+
+		context.JSON(http.StatusOK, gin.H{"id": orderID, "status": request.Status})
+	}
+}
+
+func isValidUUID(value string) bool {
+	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+		return false
+	}
+	_, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
+	return err == nil
 }
 
 func createOrder(store orderStore) gin.HandlerFunc {

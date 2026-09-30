@@ -54,6 +54,7 @@ func newRouter(store orderStore) *gin.Engine {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
 	adminRoutes.GET("/orders", listOrders(store))
+	adminRoutes.PATCH("/orders/:orderId", updateOrderStatus(store))
 
 	return router
 }

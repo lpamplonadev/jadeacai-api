@@ -13,14 +13,19 @@ import (
 )
 
 type testOrderStore struct {
-	order      createOrderRequest
-	id         string
-	err        error
-	called     bool
-	listResult paginatedOrders
-	listFilter orderListFilter
-	listErr    error
-	listCalled bool
+	order         createOrderRequest
+	id            string
+	err           error
+	called        bool
+	listResult    paginatedOrders
+	listFilter    orderListFilter
+	listErr       error
+	listCalled    bool
+	updatedID     string
+	updatedStatus string
+	updateErr     error
+	updateFound   bool
+	updateCalled  bool
 }
 
 func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (string, error) {
@@ -33,6 +38,13 @@ func (store *testOrderStore) List(_ context.Context, filter orderListFilter) (pa
 	store.listFilter = filter
 	store.listCalled = true
 	return store.listResult, store.listErr
+}
+
+func (store *testOrderStore) UpdateStatus(_ context.Context, id, status string) (bool, error) {
+	store.updatedID = id
+	store.updatedStatus = status
+	store.updateCalled = true
+	return store.updateFound, store.updateErr
 }
 
 func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
@@ -116,6 +128,55 @@ func TestAdminOrdersRejectsInvalidFilters(t *testing.T) {
 		}
 		if store.listCalled {
 			t.Errorf("store should not be called for invalid filter %s", query)
+		}
+	}
+}
+
+func TestAdminOrderStatusCanBeUpdated(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	orderID := "a4f535aa-8c2b-4f0f-9c31-783061cc7201"
+	store := &testOrderStore{updateFound: true}
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/orders/"+orderID, strings.NewReader(`{"status":"preparing"}`))
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !store.updateCalled || store.updatedID != orderID || store.updatedStatus != "preparing" {
+		t.Fatalf("unexpected status update: %+v", store)
+	}
+}
+
+func TestAdminOrderStatusRejectsInvalidValues(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	for _, testCase := range []struct {
+		orderID string
+		body    string
+	}{
+		{orderID: "invalid-id", body: `{"status":"preparing"}`},
+		{orderID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", body: `{"status":"unknown"}`},
+	} {
+		request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/orders/"+testCase.orderID, strings.NewReader(testCase.body))
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		store := &testOrderStore{}
+
+		newRouter(store).ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d, got %d for %s", http.StatusBadRequest, response.Code, testCase.orderID)
+		}
+		if store.updateCalled {
+			t.Errorf("store should not be called for invalid update %s", testCase.orderID)
 		}
 	}
 }

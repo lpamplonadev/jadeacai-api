@@ -15,6 +15,7 @@ import (
 type orderStore interface {
 	Create(context.Context, createOrderRequest) (string, error)
 	List(context.Context, orderListFilter) (paginatedOrders, error)
+	UpdateStatus(context.Context, string, string) (bool, error)
 }
 
 type postgresOrderStore struct {
@@ -141,6 +142,25 @@ func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilte
 	}
 
 	return result, nil
+}
+
+func (store *postgresOrderStore) UpdateStatus(ctx context.Context, orderID, status string) (bool, error) {
+	const query = `
+		UPDATE orders
+		SET status = $1
+		WHERE id = $2::uuid
+		RETURNING id
+	`
+
+	var updatedID string
+	err := store.db.QueryRowContext(ctx, query, status, orderID).Scan(&updatedID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("update order status: %w", err)
+	}
+	return true, nil
 }
 
 func (store *postgresOrderStore) Close() {
