@@ -15,7 +15,7 @@ import (
 type createOrderRequest struct {
 	Customer            orderCustomer      `json:"customer"`
 	Acai                orderAcai          `json:"acai"`
-	Items               []orderLineRequest `json:"items,omitempty" binding:"max=20,dive"`
+	Items               []orderLineRequest `json:"items,omitempty" binding:"max=100,dive"`
 	Delivery            orderDelivery      `json:"delivery"`
 	Payment             orderPayment       `json:"payment"`
 	Notes               string             `json:"notes"`
@@ -27,7 +27,7 @@ type orderLineRequest struct {
 	Name                   string    `json:"name" binding:"required"`
 	Description            string    `json:"description"`
 	Acai                   orderAcai `json:"acai"`
-	EstimatedSubtotalCents int       `json:"estimatedSubtotalCents" binding:"required,gt=0"`
+	EstimatedSubtotalCents int       `json:"estimatedSubtotalCents" binding:"gte=0"`
 }
 
 type orderCustomer struct {

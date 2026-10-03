@@ -233,6 +233,16 @@ func TestCreateCatalogComboRejectsDuplicateItemSelections(t *testing.T) {
 	}
 }
 
+func TestValidateComboItemsRejectsMoreThan100Units(t *testing.T) {
+	err := validateComboItems([]catalogComboItemInput{
+		{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", Quantity: 100},
+		{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", Quantity: 1},
+	})
+	if err == nil {
+		t.Fatal("expected combo unit limit validation error")
+	}
+}
+
 func TestCatalogComboCanRetainPreviouslyLinkedInactiveItem(t *testing.T) {
 	itemID := "a4f535aa-8c2b-4f0f-9c31-783061cc7201"
 	err := validateCatalogReferences(

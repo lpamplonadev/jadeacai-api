@@ -355,9 +355,14 @@ func validateCatalogCombo(name, sizeItemID string, priceCents, includedToppings,
 
 func validateComboItems(items []catalogComboItemInput) error {
 	seen := make(map[string]struct{}, len(items))
+	totalQuantity := 0
 	for _, item := range items {
 		if !isValidUUID(item.ItemID) || item.Quantity < 1 || item.Quantity > 100 {
 			return errors.New("invalid combo item selection")
+		}
+		totalQuantity += item.Quantity
+		if totalQuantity > 100 {
+			return errors.New("combo cannot contain more than 100 items")
 		}
 		if _, exists := seen[item.ItemID]; exists {
 			return errors.New("duplicate combo item selection")

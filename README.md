@@ -78,7 +78,7 @@ POST /api/v1/orders
 Content-Type: application/json
 ```
 
-O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 20 configurações no mesmo pedido; cada linha representa um açaí montado, não um produto avulso.
+O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 100 configurações no mesmo pedido; cada linha representa um açaí montado, não um produto avulso.
 
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
@@ -114,8 +114,8 @@ Todas exigem `Authorization: Bearer <ADMIN_API_KEY>`:
 - `POST /api/v1/admin/catalog/items`: cria flavor, size, topping, sauce, condiment position, fruit ou extra.
 - `PATCH /api/v1/admin/catalog/items/{itemId}`: altera nome, preço, ordem ou disponibilidade.
 - `DELETE /api/v1/admin/catalog/items/{itemId}`: arquiva o item sem apagar referências.
-- `POST /api/v1/admin/catalog/combos`: cria combo vinculando IDs de tamanho e itens existentes.
-- `PATCH /api/v1/admin/catalog/combos/{comboId}`: altera dados ou substitui os itens vinculados.
+- `POST /api/v1/admin/catalog/combos`: cria combo vinculando tamanhos e itens existentes; `items` aceita várias porções de tamanho com `quantity` (por exemplo, duas de 770 ml e uma de 500 ml), com soma total de quantidades limitada a 100. `sizeItemId` identifica o primeiro tamanho para compatibilidade.
+- `PATCH /api/v1/admin/catalog/combos/{comboId}`: altera dados ou substitui tamanhos e demais itens vinculados.
 - `DELETE /api/v1/admin/catalog/combos/{comboId}`: arquiva o combo.
 
 ### Configurar Supabase

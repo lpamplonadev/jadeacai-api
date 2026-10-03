@@ -475,7 +475,7 @@ func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, size
 		if err := queryer.QueryRowContext(ctx, `
 			SELECT EXISTS (
 				SELECT 1 FROM catalog_items
-				WHERE id = $1::uuid AND kind <> 'size' AND available AND deleted_at IS NULL
+				WHERE id = $1::uuid AND available AND deleted_at IS NULL
 			)
 		`, item.ItemID).Scan(&isSelectable); err != nil {
 			return fmt.Errorf("validate combo item: %w", err)
