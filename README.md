@@ -104,7 +104,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 ## Modelo do catálogo
 
-A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
 
 ### Rotas administrativas do catálogo
 
