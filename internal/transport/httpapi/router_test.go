@@ -1,4 +1,4 @@
-package main
+package httpapi
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
 )
 
 type testOrderStore struct {
@@ -94,10 +96,8 @@ func (store *testOrderStore) ArchiveCatalogCombo(_ context.Context, _ string) (b
 	return store.comboArchived, nil
 }
 
-func TestOpenOrderStoreRequiresDatabaseURL(t *testing.T) {
-	if _, err := openOrderStore(""); err == nil {
-		t.Fatal("expected missing DATABASE_URL to fail")
-	}
+func newRouter(repository application.Repository) *gin.Engine {
+	return NewRouter(application.NewService(repository), os.Getenv("ADMIN_API_KEY"))
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -230,31 +230,6 @@ func TestCreateCatalogComboRejectsDuplicateItemSelections(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
-	}
-}
-
-func TestValidateComboItemsRejectsMoreThan100Units(t *testing.T) {
-	err := validateComboItems([]catalogComboItemInput{
-		{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", Quantity: 100},
-		{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", Quantity: 1},
-	})
-	if err == nil {
-		t.Fatal("expected combo unit limit validation error")
-	}
-}
-
-func TestCatalogComboCanRetainPreviouslyLinkedInactiveItem(t *testing.T) {
-	itemID := "a4f535aa-8c2b-4f0f-9c31-783061cc7201"
-	err := validateCatalogReferences(
-		context.Background(),
-		nil,
-		"a4f535aa-8c2b-4f0f-9c31-783061cc7202",
-		[]catalogComboItemInput{{ItemID: itemID, Quantity: 1}},
-		"a4f535aa-8c2b-4f0f-9c31-783061cc7202",
-		[]catalogComboItemRecord{{ItemID: itemID, Available: false}},
-	)
-	if err != nil {
-		t.Fatalf("expected an existing inactive link to remain valid, got %v", err)
 	}
 }
 

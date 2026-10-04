@@ -1,4 +1,4 @@
-package main
+package postgres
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
 )
 
 type catalogQueryer interface {
@@ -19,7 +21,7 @@ type catalogRowScanner interface {
 	Scan(...any) error
 }
 
-func (store *postgresOrderStore) Catalog(ctx context.Context) (catalogData, error) {
+func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	result := catalogData{
 		Items:  make([]catalogItemRecord, 0),
 		Combos: make([]catalogComboRecord, 0),
@@ -144,7 +146,7 @@ func (store *postgresOrderStore) Catalog(ctx context.Context) (catalogData, erro
 	return result, nil
 }
 
-func (store *postgresOrderStore) CreateCatalogItem(ctx context.Context, request createCatalogItemRequest, itemKey string, available bool) (catalogItemRecord, error) {
+func (store *Store) CreateCatalogItem(ctx context.Context, request createCatalogItemRequest, itemKey string, available bool) (catalogItemRecord, error) {
 	const query = `
 		INSERT INTO catalog_items (item_key, kind, name, price_cents, available, sort_order)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -157,7 +159,7 @@ func (store *postgresOrderStore) CreateCatalogItem(ctx context.Context, request 
 	return item, nil
 }
 
-func (store *postgresOrderStore) UpdateCatalogItem(ctx context.Context, itemID string, request updateCatalogItemRequest) (catalogItemRecord, bool, error) {
+func (store *Store) UpdateCatalogItem(ctx context.Context, itemID string, request updateCatalogItemRequest) (catalogItemRecord, bool, error) {
 	const query = `
 		UPDATE catalog_items
 		SET name = COALESCE($1, name),
@@ -184,7 +186,7 @@ func (store *postgresOrderStore) UpdateCatalogItem(ctx context.Context, itemID s
 	return item, true, nil
 }
 
-func (store *postgresOrderStore) ArchiveCatalogItem(ctx context.Context, itemID string) (bool, error) {
+func (store *Store) ArchiveCatalogItem(ctx context.Context, itemID string) (bool, error) {
 	var archivedID string
 	err := store.db.QueryRowContext(ctx, `
 		UPDATE catalog_items
@@ -201,7 +203,7 @@ func (store *postgresOrderStore) ArchiveCatalogItem(ctx context.Context, itemID 
 	return true, nil
 }
 
-func (store *postgresOrderStore) CreateCatalogCombo(ctx context.Context, request createCatalogComboRequest, comboKey string, available bool) (catalogComboRecord, error) {
+func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalogComboRequest, comboKey string, available bool) (catalogComboRecord, error) {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return catalogComboRecord{}, fmt.Errorf("begin create catalog combo: %w", err)
@@ -250,7 +252,7 @@ func (store *postgresOrderStore) CreateCatalogCombo(ctx context.Context, request
 	return combo, nil
 }
 
-func (store *postgresOrderStore) UpdateCatalogCombo(ctx context.Context, comboID string, request updateCatalogComboRequest) (catalogComboRecord, bool, error) {
+func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, request updateCatalogComboRequest) (catalogComboRecord, bool, error) {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return catalogComboRecord{}, false, fmt.Errorf("begin update catalog combo: %w", err)
@@ -354,7 +356,7 @@ func (store *postgresOrderStore) UpdateCatalogCombo(ctx context.Context, comboID
 	return updated, true, nil
 }
 
-func (store *postgresOrderStore) ArchiveCatalogCombo(ctx context.Context, comboID string) (bool, error) {
+func (store *Store) ArchiveCatalogCombo(ctx context.Context, comboID string) (bool, error) {
 	var archivedID string
 	err := store.db.QueryRowContext(ctx, `
 		UPDATE catalog_combos
@@ -459,7 +461,7 @@ func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, size
 			return fmt.Errorf("validate combo size: %w", err)
 		}
 		if !isActiveSize {
-			return errCatalogReference
+			return application.ErrCatalogReference
 		}
 	}
 
@@ -481,7 +483,7 @@ func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, size
 			return fmt.Errorf("validate combo item: %w", err)
 		}
 		if !isSelectable {
-			return errCatalogReference
+			return application.ErrCatalogReference
 		}
 	}
 	return nil

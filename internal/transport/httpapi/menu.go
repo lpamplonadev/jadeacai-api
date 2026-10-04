@@ -1,10 +1,12 @@
-package main
+package httpapi
 
 import (
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/domain"
 )
 
 type publicMenuItem struct {
@@ -17,18 +19,18 @@ type publicMenuItem struct {
 }
 
 type publicMenuCombo struct {
-	ID               string `json:"id"`
-	Key              string `json:"key"`
-	Name             string `json:"name"`
-	SizeID           string `json:"sizeId"`
-	Size             string `json:"size"`
-	PriceCents       int    `json:"priceCents"`
-	IncludedToppings int    `json:"includedToppings"`
-	IncludedFruits   int    `json:"includedFruits"`
-	IncludedExtras   int    `json:"includedExtras"`
-	Tag              string `json:"tag"`
-	ImageURL         string `json:"image"`
-	ImageAlt         string `json:"imageAlt"`
+	ID               string                `json:"id"`
+	Key              string                `json:"key"`
+	Name             string                `json:"name"`
+	SizeID           string                `json:"sizeId"`
+	Size             string                `json:"size"`
+	PriceCents       int                   `json:"priceCents"`
+	IncludedToppings int                   `json:"includedToppings"`
+	IncludedFruits   int                   `json:"includedFruits"`
+	IncludedExtras   int                   `json:"includedExtras"`
+	Tag              string                `json:"tag"`
+	ImageURL         string                `json:"image"`
+	ImageAlt         string                `json:"imageAlt"`
 	Items            []publicMenuComboItem `json:"items"`
 }
 
@@ -45,7 +47,7 @@ type publicMenuCatalog struct {
 	Rules  map[string]any    `json:"rules"`
 }
 
-func getMenuCatalog(store orderStore) gin.HandlerFunc {
+func getMenuCatalog(store *application.Service) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		catalog, err := store.Catalog(context.Request.Context())
 		if err != nil {
@@ -57,7 +59,7 @@ func getMenuCatalog(store orderStore) gin.HandlerFunc {
 	}
 }
 
-func getMenuCombos(store orderStore) gin.HandlerFunc {
+func getMenuCombos(store *application.Service) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		catalog, err := store.Catalog(context.Request.Context())
 		if err != nil {
@@ -98,7 +100,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			continue
 		}
 		size, exists := activeItems[combo.SizeItemID]
-		if !exists || size.Kind != string(catalogSize) {
+		if !exists || size.Kind != string(domain.CatalogSize) {
 			continue
 		}
 		comboItems := make([]publicMenuComboItem, 0, len(combo.Items))

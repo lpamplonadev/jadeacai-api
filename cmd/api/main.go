@@ -4,12 +4,11 @@ import (
 	"errors"
 	"log"
 	"os"
-	"strings"
-	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/infrastructure/postgres"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/transport/httpapi"
 )
 
 func main() {
@@ -22,75 +21,14 @@ func main() {
 		port = "8080"
 	}
 
-	store, err := openOrderStore(os.Getenv("DATABASE_URL"))
+	store, err := postgres.Open(os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
 	defer store.Close()
 
-	if err := newRouter(store).Run(":" + port); err != nil {
+	service := application.NewService(store)
+	if err := httpapi.NewRouter(service, os.Getenv("ADMIN_API_KEY")).Run(":" + port); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
-}
-
-func newRouter(store orderStore) *gin.Engine {
-	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery(), cors.New(cors.Config{
-		AllowOrigins: allowedCORSOrigins(),
-		AllowMethods: []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		MaxAge:       12 * time.Hour,
-	}))
-
-	router.GET("/health", func(context *gin.Context) {
-		context.JSON(200, gin.H{"status": "ok"})
-	})
-	router.GET("/api/v1/menu/catalog", getMenuCatalog(store))
-	router.GET("/api/v1/menu/combos", getMenuCombos(store))
-	router.POST("/api/v1/orders", createOrder(store))
-
-	adminRoutes := router.Group("/api/v1/admin")
-	adminRoutes.Use(adminAPIKeyAuth(os.Getenv("ADMIN_API_KEY")))
-	adminRoutes.GET("/health", func(context *gin.Context) {
-		context.JSON(200, gin.H{"status": "ok"})
-	})
-	adminRoutes.GET("/dashboard", getDashboard(store))
-	adminRoutes.GET("/orders", listOrders(store))
-	adminRoutes.PATCH("/orders/:orderId", updateOrderStatus(store))
-	adminRoutes.GET("/catalog", getCatalog(store))
-	adminRoutes.POST("/catalog/items", createCatalogItem(store))
-	adminRoutes.PATCH("/catalog/items/:itemId", updateCatalogItem(store))
-	adminRoutes.DELETE("/catalog/items/:itemId", archiveCatalogItem(store))
-	adminRoutes.POST("/catalog/combos", createCatalogCombo(store))
-	adminRoutes.PATCH("/catalog/combos/:comboId", updateCatalogCombo(store))
-	adminRoutes.DELETE("/catalog/combos/:comboId", archiveCatalogCombo(store))
-
-	return router
-}
-
-func allowedCORSOrigins() []string {
-	configuredOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if configuredOrigins == "" {
-		return []string{
-			"https://jadeacai-web.vercel.app",
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-		}
-	}
-
-	origins := make([]string, 0)
-	for _, origin := range strings.Split(configuredOrigins, ",") {
-		if origin = strings.TrimSpace(origin); origin != "" {
-			origins = append(origins, origin)
-		}
-	}
-	if len(origins) == 0 {
-		return []string{
-			"https://jadeacai-web.vercel.app",
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-		}
-	}
-
-	return origins
 }

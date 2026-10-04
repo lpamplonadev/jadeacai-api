@@ -2,6 +2,8 @@
 
 API backend do projeto Jade Açaí, desenvolvido em Go com Gin.
 
+Consulte [ARCHITECTURE.md](ARCHITECTURE.md) para conhecer as camadas e as regras de dependência do backend.
+
 ## Requisitos
 
 - Go 1.23 ou superior

@@ -1,4 +1,4 @@
-package main
+package postgres
 
 import (
 	"context"
@@ -10,27 +10,14 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/domain"
 )
 
-type orderStore interface {
-	Create(context.Context, createOrderRequest) (createdOrder, error)
-	List(context.Context, orderListFilter) (paginatedOrders, error)
-	Dashboard(context.Context, string) (dashboardData, error)
-	UpdateStatus(context.Context, string, string) (bool, error)
-	Catalog(context.Context) (catalogData, error)
-	CreateCatalogItem(context.Context, createCatalogItemRequest, string, bool) (catalogItemRecord, error)
-	UpdateCatalogItem(context.Context, string, updateCatalogItemRequest) (catalogItemRecord, bool, error)
-	ArchiveCatalogItem(context.Context, string) (bool, error)
-	CreateCatalogCombo(context.Context, createCatalogComboRequest, string, bool) (catalogComboRecord, error)
-	UpdateCatalogCombo(context.Context, string, updateCatalogComboRequest) (catalogComboRecord, bool, error)
-	ArchiveCatalogCombo(context.Context, string) (bool, error)
-}
-
-type postgresOrderStore struct {
+type Store struct {
 	db *sql.DB
 }
 
-func openOrderStore(connectionString string) (*postgresOrderStore, error) {
+func Open(connectionString string) (*Store, error) {
 	if strings.TrimSpace(connectionString) == "" {
 		return nil, errors.New("DATABASE_URL is required")
 	}
@@ -61,10 +48,10 @@ func openOrderStore(connectionString string) (*postgresOrderStore, error) {
 		return nil, errors.New("orders table does not exist; run the Supabase database migrations")
 	}
 
-	return &postgresOrderStore{db: db}, nil
+	return &Store{db: db}, nil
 }
 
-func (store *postgresOrderStore) Create(ctx context.Context, request createOrderRequest) (createdOrder, error) {
+func (store *Store) Create(ctx context.Context, request createOrderRequest) (createdOrder, error) {
 	orderData, err := json.Marshal(request)
 	if err != nil {
 		return createdOrder{}, fmt.Errorf("encode order: %w", err)
@@ -123,7 +110,7 @@ func (store *postgresOrderStore) Create(ctx context.Context, request createOrder
 	return created, nil
 }
 
-func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilter) (paginatedOrders, error) {
+func (store *Store) List(ctx context.Context, filter orderListFilter) (paginatedOrders, error) {
 	const countQuery = `
 		SELECT COUNT(*)
 		FROM orders
@@ -186,7 +173,7 @@ func (store *postgresOrderStore) List(ctx context.Context, filter orderListFilte
 	return result, nil
 }
 
-func (store *postgresOrderStore) Dashboard(ctx context.Context, date string) (dashboardData, error) {
+func (store *Store) Dashboard(ctx context.Context, date string) (dashboardData, error) {
 	const summaryQuery = `
 		WITH target_day AS (
 			SELECT COALESCE(NULLIF($1, '')::date, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date) AS order_date
@@ -209,10 +196,10 @@ func (store *postgresOrderStore) Dashboard(ctx context.Context, date string) (da
 	`
 
 	result := dashboardData{
-		StatusCounts: make([]orderStatusCount, 0, len(validOrderStatuses)),
+		StatusCounts: make([]orderStatusCount, 0, domain.OrderStatusCount),
 		RecentOrders: make([]dashboardRecentOrder, 0, 5),
 	}
-	var statusTotals [len(validOrderStatuses)]int64
+	var statusTotals [domain.OrderStatusCount]int64
 	if err := store.db.QueryRowContext(ctx, summaryQuery, date).Scan(
 		&result.Date,
 		&result.OrdersToday,
@@ -228,8 +215,8 @@ func (store *postgresOrderStore) Dashboard(ctx context.Context, date string) (da
 	); err != nil {
 		return dashboardData{}, fmt.Errorf("query dashboard summary: %w", err)
 	}
-	for index, status := range validOrderStatuses {
-		result.StatusCounts = append(result.StatusCounts, orderStatusCount{Status: status, Count: statusTotals[index]})
+	for index, status := range domain.OrderStatuses() {
+		result.StatusCounts = append(result.StatusCounts, orderStatusCount{Status: string(status), Count: statusTotals[index]})
 	}
 
 	const recentOrdersQuery = `
@@ -266,7 +253,7 @@ func (store *postgresOrderStore) Dashboard(ctx context.Context, date string) (da
 	return result, nil
 }
 
-func (store *postgresOrderStore) UpdateStatus(ctx context.Context, orderID, status string) (bool, error) {
+func (store *Store) UpdateStatus(ctx context.Context, orderID, status string) (bool, error) {
 	const query = `
 		UPDATE orders
 		SET status = $1
@@ -285,6 +272,6 @@ func (store *postgresOrderStore) UpdateStatus(ctx context.Context, orderID, stat
 	return true, nil
 }
 
-func (store *postgresOrderStore) Close() {
+func (store *Store) Close() {
 	store.db.Close()
 }
