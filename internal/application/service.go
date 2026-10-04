@@ -38,6 +38,10 @@ func NewService(repository Repository) *Service {
 }
 
 func (service *Service) Create(ctx context.Context, request CreateOrderRequest) (CreatedOrder, error) {
+	if !domain.IsValidBrazilianMobilePhone(request.Customer.Phone) {
+		return CreatedOrder{}, domain.ErrInvalidPhone
+	}
+	request.Customer.Phone = domain.NormalizeBrazilianPhone(request.Customer.Phone)
 	if request.EstimatedTotalCents <= 0 ||
 		strings.TrimSpace(request.Customer.Name) == "" || strings.TrimSpace(request.Customer.Phone) == "" ||
 		strings.TrimSpace(request.Acai.FlavorID) == "" || strings.TrimSpace(request.Acai.SizeID) == "" ||

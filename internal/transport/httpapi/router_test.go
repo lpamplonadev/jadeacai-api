@@ -541,7 +541,7 @@ func ptr(value string) *string {
 func TestCreateOrderEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &testOrderStore{created: createdOrder{ID: "order-123", OrderNumber: 7, OrderDate: "2026-09-29"}}
-	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"chocolate","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":["nutella"]},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro","complement":"","reference":""},"payment":{"method":"pix","needsChange":false,"changeForCents":0},"notes":"","estimatedTotalCents":1990}`
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"(21) 99999-0000"},"acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"chocolate","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":["nutella"]},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro","complement":"","reference":""},"payment":{"method":"pix","needsChange":false,"changeForCents":0},"notes":"","estimatedTotalCents":1990}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -615,5 +615,20 @@ func TestCreateOrderRejectsInvalidPayload(t *testing.T) {
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("expected status %d for %q, got %d", http.StatusBadRequest, requestBody, response.Code)
 		}
+	}
+}
+
+func TestCreateOrderRejectsInvalidPhone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{}
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"(21) 29999-0000"},"acai":{"flavorId":"banana","sizeId":"500"},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro"},"payment":{"method":"pix"},"estimatedTotalCents":1990}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest || store.called {
+		t.Fatalf("expected invalid phone to be rejected before persistence, got %d", response.Code)
 	}
 }

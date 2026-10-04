@@ -82,6 +82,8 @@ Content-Type: application/json
 
 O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuração para compatibilidade, `items` com as linhas do carrinho (`id`, `name`, `description`, `acai` e `estimatedSubtotalCents`), `delivery` (`postalCode`, `street`, `number`, `neighborhood`, `complement`, `reference`), `payment` (`method`: `pix`, `cash` ou `card`, `needsChange`, `changeForCents`), `notes` e `estimatedTotalCents` do pedido completo. `items` aceita até 100 configurações no mesmo pedido; cada linha representa um açaí montado, não um produto avulso.
 
+`customer.phone` deve ser um celular brasileiro válido: DDD ativo e número com 9 dígitos iniciado por `9`. A API aceita o número formatado (`(21) 99999-9999`) ou somente dígitos e armazena a coluna de busca normalizada para dígitos.
+
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
 ## Listagem Admin de pedidos

@@ -140,6 +140,10 @@ func createOrder(store *application.Service) gin.HandlerFunc {
 			return
 		}
 		created, err := store.Create(context.Request.Context(), request)
+		if errors.Is(err, domain.ErrInvalidPhone) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid customer phone"})
+			return
+		}
 		if errors.Is(err, application.ErrInvalidInput) {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid order item"})
 			return

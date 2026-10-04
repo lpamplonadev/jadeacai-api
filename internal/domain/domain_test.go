@@ -28,3 +28,22 @@ func TestIsValidUUID(t *testing.T) {
 		t.Fatal("expected malformed UUID to be rejected")
 	}
 }
+
+func TestIsValidBrazilianMobilePhone(t *testing.T) {
+	for _, phone := range []string{"21999990000", "(21) 99999-0000"} {
+		if !IsValidBrazilianMobilePhone(phone) {
+			t.Errorf("expected %q to be a valid Brazilian mobile phone", phone)
+		}
+	}
+	for _, phone := range []string{"(20) 99999-0000", "(21) 29999-0000", "(21) 9999-0000"} {
+		if IsValidBrazilianMobilePhone(phone) {
+			t.Errorf("expected %q to be rejected", phone)
+		}
+	}
+}
+
+func TestNormalizeBrazilianPhone(t *testing.T) {
+	if got := NormalizeBrazilianPhone("(21) 99999-0000"); got != "21999990000" {
+		t.Fatalf("expected normalized phone digits, got %q", got)
+	}
+}
