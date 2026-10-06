@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/domain"
 )
 
 type catalogQueryer interface {
@@ -133,6 +134,9 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 		var rawValue []byte
 		if err := rules.Scan(&rule.Key, &rawValue); err != nil {
 			return catalogData{}, fmt.Errorf("scan catalog rule: %w", err)
+		}
+		if rule.Key == domain.StoreSettingsRuleKey {
+			continue
 		}
 		if err := json.Unmarshal(rawValue, &rule.Value); err != nil {
 			return catalogData{}, fmt.Errorf("decode catalog rule: %w", err)

@@ -17,6 +17,8 @@ var ErrInvalidInput = errors.New("invalid application input")
 
 type Repository interface {
 	Create(context.Context, CreateOrderRequest) (CreatedOrder, error)
+	StoreSettings(context.Context) (domain.StoreSettings, error)
+	SaveStoreSettings(context.Context, domain.StoreSettings) error
 	List(context.Context, OrderListFilter) (PaginatedOrders, error)
 	Dashboard(context.Context, string) (DashboardData, error)
 	UpdateStatus(context.Context, string, string) (bool, error)
@@ -58,7 +60,57 @@ func (service *Service) Create(ctx context.Context, request CreateOrderRequest) 
 			return CreatedOrder{}, ErrInvalidInput
 		}
 	}
+	status, err := service.StoreStatus(ctx, time.Now())
+	if err != nil {
+		return CreatedOrder{}, err
+	}
+	if !status.IsOpen {
+		return CreatedOrder{}, domain.ErrStoreClosed
+	}
 	return service.repository.Create(ctx, request)
+}
+
+func (service *Service) StoreSettings(ctx context.Context) (domain.StoreSettings, error) {
+	settings, err := service.repository.StoreSettings(ctx)
+	if err != nil {
+		return domain.StoreSettings{}, err
+	}
+	if err := domain.ValidateStoreSettings(settings); err != nil {
+		return domain.StoreSettings{}, err
+	}
+	return settings, nil
+}
+
+func (service *Service) StoreStatus(ctx context.Context, now time.Time) (domain.StoreStatus, error) {
+	settings, err := service.StoreSettings(ctx)
+	if err != nil {
+		return domain.StoreStatus{}, err
+	}
+	return domain.NewStoreStatus(settings, now), nil
+}
+
+func (service *Service) UpdateStoreSettings(ctx context.Context, settings domain.StoreSettings) error {
+	if err := domain.ValidateStoreSettings(settings); err != nil {
+		return err
+	}
+	whatsAppNumber := domain.NormalizeBrazilianPhone(settings.WhatsAppNumber)
+	if strings.HasPrefix(whatsAppNumber, "55") {
+		whatsAppNumber = strings.TrimPrefix(whatsAppNumber, "55")
+	}
+	settings.WhatsAppNumber = "55" + whatsAppNumber
+	return service.repository.SaveStoreSettings(ctx, settings)
+}
+
+func (service *Service) SetStoreOverride(ctx context.Context, override *bool) (domain.StoreSettings, error) {
+	settings, err := service.StoreSettings(ctx)
+	if err != nil {
+		return domain.StoreSettings{}, err
+	}
+	settings.ManualOverride = override
+	if err := service.UpdateStoreSettings(ctx, settings); err != nil {
+		return domain.StoreSettings{}, err
+	}
+	return settings, nil
 }
 
 func (service *Service) List(ctx context.Context, filter OrderListFilter) (PaginatedOrders, error) {

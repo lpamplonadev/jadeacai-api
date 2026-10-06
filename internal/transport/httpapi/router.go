@@ -22,6 +22,7 @@ func NewRouter(service *application.Service, adminAPIKey string) *gin.Engine {
 	router.GET("/health", func(context *gin.Context) {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
+	router.GET("/api/v1/store/status", getStoreStatus(service))
 	router.GET("/api/v1/menu/catalog", getMenuCatalog(service))
 	router.GET("/api/v1/menu/combos", getMenuCombos(service))
 	router.POST("/api/v1/orders", createOrder(service))
@@ -31,6 +32,9 @@ func NewRouter(service *application.Service, adminAPIKey string) *gin.Engine {
 	adminRoutes.GET("/health", func(context *gin.Context) {
 		context.JSON(200, gin.H{"status": "ok"})
 	})
+	adminRoutes.GET("/settings", getStoreSettings(service))
+	adminRoutes.PATCH("/settings", updateStoreSettings(service))
+	adminRoutes.PATCH("/settings/override", updateStoreOverride(service))
 	adminRoutes.GET("/dashboard", getDashboard(service))
 	adminRoutes.GET("/orders", listOrders(service))
 	adminRoutes.PATCH("/orders/:orderId", updateOrderStatus(service))

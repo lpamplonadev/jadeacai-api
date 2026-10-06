@@ -58,6 +58,8 @@ GET /api/v1/menu/combos
 
 A resposta contém `{ "combos": [...] }`, com preços em centavos (`priceCents`) e IDs estáveis do catálogo.
 
+`GET /api/v1/store/status` retorna `isOpen`, `manualOverride`, `timeZone` e as configurações públicas da loja. O calendário usa `America/Sao_Paulo`: terça a sexta das 19h às 23h, sábado e domingo das 17h às 23h; segunda-feira fica fechada por padrão.
+
 ## CORS
 
 Por padrão, a API permite chamadas do frontend publicado em `https://jadeacai-web.vercel.app` e dos frontends locais em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão. No Render, defina essa variável nas configurações do serviço (o arquivo `.env` local não é enviado ao deploy):
@@ -73,6 +75,8 @@ Somente os métodos `GET`, `POST` e `OPTIONS` são permitidos. As origens devem 
 
 As rotas em `/api/v1/admin/*` exigem `Authorization: Bearer <ADMIN_API_KEY>`. Configure `ADMIN_API_KEY` no backend e no ambiente privado do frontend com o mesmo segredo aleatório de pelo menos 32 caracteres. No frontend, use somente uma variável server-side chamada `ADMIN_API_KEY`, nunca `NEXT_PUBLIC_ADMIN_API_KEY`. O Next valida a sessão `jade_admin_session` antes de encaminhar chamadas administrativas. A rota `GET /api/v1/admin/health` permite conferir a autenticação; sem segredo configurado ela responde `503`, e com uma credencial inválida responde `401`.
 
+As configurações gerais usam `GET` e `PATCH /api/v1/admin/settings` para horários semanais, conteúdo da seção Nossa história e telefone WhatsApp. `PATCH /api/v1/admin/settings/override` recebe `{"manualOverride":true}`, `false` ou `null` para abrir, fechar ou voltar ao calendário automático.
+
 ## Recebimento de pedidos
 
 ```http
@@ -84,7 +88,7 @@ O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuraçã
 
 `customer.phone` deve ser um celular brasileiro válido: DDD ativo e número com 9 dígitos iniciado por `9`. A API aceita o número formatado (`(21) 99999-9999`) ou somente dígitos e armazena a coluna de busca normalizada para dígitos.
 
-A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Em caso de falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
+A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Quando a loja está fechada pelo horário ou pelo controle manual, responde `409 Conflict` sem persistir. Em caso de outra falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
 ## Listagem Admin de pedidos
 
@@ -108,7 +112,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 ## Modelo do catálogo
 
-A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. A migration [20261005160000_add_store_settings.sql](supabase/migrations/20261005160000_add_store_settings.sql) semeia horários, história e telefone padrão da loja. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
 
 ### Rotas administrativas do catálogo
 

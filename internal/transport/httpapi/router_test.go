@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lpamplonadev/jadeacai-bkend/internal/application"
+	"github.com/lpamplonadev/jadeacai-bkend/internal/domain"
 )
 
 type testOrderStore struct {
@@ -33,6 +34,8 @@ type testOrderStore struct {
 	dashboardErr    error
 	dashboardCalled bool
 	catalog         catalogData
+	settings        domain.StoreSettings
+	settingsErr     error
 	createdItem     catalogItemRecord
 	updatedItem     catalogItemRecord
 	itemFound       bool
@@ -70,6 +73,23 @@ func (store *testOrderStore) Dashboard(_ context.Context, date string) (dashboar
 
 func (store *testOrderStore) Catalog(_ context.Context) (catalogData, error) {
 	return store.catalog, nil
+}
+
+func (store *testOrderStore) StoreSettings(_ context.Context) (domain.StoreSettings, error) {
+	if store.settingsErr != nil {
+		return domain.StoreSettings{}, store.settingsErr
+	}
+	if store.settings.WeeklyHours == nil {
+		store.settings = domain.DefaultStoreSettings()
+		open := true
+		store.settings.ManualOverride = &open
+	}
+	return store.settings, nil
+}
+
+func (store *testOrderStore) SaveStoreSettings(_ context.Context, settings domain.StoreSettings) error {
+	store.settings = settings
+	return nil
 }
 
 func (store *testOrderStore) CreateCatalogItem(_ context.Context, _ createCatalogItemRequest, _ string, _ bool) (catalogItemRecord, error) {
@@ -112,6 +132,45 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if response.Body.String() != `{"status":"ok"}` {
 		t.Fatalf("unexpected response body: %s", response.Body.String())
+	}
+}
+
+func TestPublicStoreStatusRespectsManualOverride(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	closed := false
+	store := &testOrderStore{settings: domain.DefaultStoreSettings()}
+	store.settings.ManualOverride = &closed
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/store/status", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	var status domain.StoreStatus
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode store status: %v", err)
+	}
+	if status.IsOpen || status.ManualOverride == nil || *status.ManualOverride {
+		t.Fatalf("expected manually closed status, got %+v", status)
+	}
+}
+
+func TestAdminCanSetStoreManualOverride(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	apiKey := "test-admin-api-key-with-at-least-32-characters"
+	t.Setenv("ADMIN_API_KEY", apiKey)
+	store := &testOrderStore{}
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/settings/override", strings.NewReader(`{"manualOverride":false}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || store.settings.ManualOverride == nil || *store.settings.ManualOverride {
+		t.Fatalf("expected manual closed override, got status %d and settings %+v", response.Code, store.settings)
 	}
 }
 

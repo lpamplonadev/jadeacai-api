@@ -140,6 +140,10 @@ func createOrder(store *application.Service) gin.HandlerFunc {
 			return
 		}
 		created, err := store.Create(context.Request.Context(), request)
+		if errors.Is(err, domain.ErrStoreClosed) {
+			context.JSON(http.StatusConflict, gin.H{"error": "store_closed", "message": "A loja está fechada no momento."})
+			return
+		}
 		if errors.Is(err, domain.ErrInvalidPhone) {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid customer phone"})
 			return
