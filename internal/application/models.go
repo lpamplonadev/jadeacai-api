@@ -32,6 +32,7 @@ type OrderAcai struct {
 	FlavorID            string   `json:"flavorId"`
 	SizeID              string   `json:"sizeId"`
 	ComboID             string   `json:"comboId"`
+	GourmetID           string   `json:"gourmetId"`
 	ToppingIDs          []string `json:"toppingIds"`
 	SauceID             string   `json:"sauceId"`
 	CondimentPositionID string   `json:"condimentPositionId"`
@@ -137,39 +138,81 @@ type CatalogComboItemRecord struct {
 	Available bool   `json:"available"`
 }
 
-type CatalogComboGourmetSizeRecord struct {
+type CatalogComboRecord struct {
+	ID               string                   `json:"id"`
+	ComboKey         string                   `json:"comboKey"`
+	Name             string                   `json:"name"`
+	SizeItemID       string                   `json:"sizeItemId"`
+	SizeName         string                   `json:"sizeName"`
+	PriceCents       int                      `json:"priceCents"`
+	IncludedToppings int                      `json:"includedToppings"`
+	IncludedFruits   int                      `json:"includedFruits"`
+	IncludedExtras   int                      `json:"includedExtras"`
+	Tag              string                   `json:"tag"`
+	ImageURL         string                   `json:"imageUrl"`
+	ImageAlt         string                   `json:"imageAlt"`
+	Available        bool                     `json:"available"`
+	SortOrder        int                      `json:"sortOrder"`
+	DeletedAt        *string                  `json:"deletedAt"`
+	Items            []CatalogComboItemRecord `json:"items"`
+}
+
+type CatalogGourmetSizeRecord struct {
 	SizeItemID string `json:"sizeItemId"`
 	SizeName   string `json:"sizeName"`
 	PriceCents int    `json:"priceCents"`
 	Available  bool   `json:"available"`
 }
 
-type CatalogComboRecord struct {
-	ID               string                          `json:"id"`
-	ComboKey         string                          `json:"comboKey"`
-	Category         string                          `json:"category"`
-	Name             string                          `json:"name"`
-	Description      string                          `json:"description"`
-	SizeItemID       string                          `json:"sizeItemId"`
-	SizeName         string                          `json:"sizeName"`
-	PriceCents       int                             `json:"priceCents"`
-	IncludedToppings int                             `json:"includedToppings"`
-	IncludedFruits   int                             `json:"includedFruits"`
-	IncludedExtras   int                             `json:"includedExtras"`
-	Tag              string                          `json:"tag"`
-	ImageURL         string                          `json:"imageUrl"`
-	ImageAlt         string                          `json:"imageAlt"`
-	Available        bool                            `json:"available"`
-	SortOrder        int                             `json:"sortOrder"`
-	DeletedAt        *string                         `json:"deletedAt"`
-	Items            []CatalogComboItemRecord        `json:"items"`
-	GourmetSizes     []CatalogComboGourmetSizeRecord `json:"gourmetSizes"`
+type CatalogGourmetRecord struct {
+	ID          string                     `json:"id"`
+	GourmetKey  string                     `json:"gourmetKey"`
+	Name        string                     `json:"name"`
+	Description string                     `json:"description"`
+	Tag         string                     `json:"tag"`
+	ImageURL    string                     `json:"imageUrl"`
+	ImageAlt    string                     `json:"imageAlt"`
+	Available   bool                       `json:"available"`
+	SortOrder   int                        `json:"sortOrder"`
+	DeletedAt   *string                    `json:"deletedAt"`
+	Items       []CatalogComboItemRecord   `json:"items"`
+	Sizes       []CatalogGourmetSizeRecord `json:"sizes"`
+}
+
+type CatalogGourmetSizeInput struct {
+	SizeItemID string `json:"sizeItemId"`
+	PriceCents int    `json:"priceCents"`
+}
+
+type CreateCatalogGourmetRequest struct {
+	Name        string                    `json:"name"`
+	Description string                    `json:"description"`
+	Tag         string                    `json:"tag"`
+	ImageURL    string                    `json:"imageUrl"`
+	ImageAlt    string                    `json:"imageAlt"`
+	Available   *bool                     `json:"available"`
+	SortOrder   int                       `json:"sortOrder"`
+	Items       []CatalogComboItemInput   `json:"items"`
+	Sizes       []CatalogGourmetSizeInput `json:"sizes"`
+}
+
+type UpdateCatalogGourmetRequest struct {
+	Name        *string                    `json:"name"`
+	Description *string                    `json:"description"`
+	Tag         *string                    `json:"tag"`
+	ImageURL    *string                    `json:"imageUrl"`
+	ImageAlt    *string                    `json:"imageAlt"`
+	Available   *bool                      `json:"available"`
+	SortOrder   *int                       `json:"sortOrder"`
+	Items       *[]CatalogComboItemInput   `json:"items"`
+	Sizes       *[]CatalogGourmetSizeInput `json:"sizes"`
 }
 
 type CatalogData struct {
-	Items  []CatalogItemRecord  `json:"items"`
-	Combos []CatalogComboRecord `json:"combos"`
-	Rules  []CatalogRuleRecord  `json:"rules"`
+	Items    []CatalogItemRecord    `json:"items"`
+	Combos   []CatalogComboRecord   `json:"combos"`
+	Gourmets []CatalogGourmetRecord `json:"gourmets"`
+	Rules    []CatalogRuleRecord    `json:"rules"`
 }
 
 type CreateCatalogItemRequest struct {
@@ -192,43 +235,32 @@ type CatalogComboItemInput struct {
 	Quantity int    `json:"quantity"`
 }
 
-type CatalogComboGourmetSizeInput struct {
-	SizeItemID string `json:"sizeItemId"`
-	PriceCents int    `json:"priceCents"`
-}
-
 type CreateCatalogComboRequest struct {
-	Name             string                         `json:"name"`
-	Category         string                         `json:"category"`
-	Description      string                         `json:"description"`
-	SizeItemID       string                         `json:"sizeItemId"`
-	PriceCents       int                            `json:"priceCents"`
-	IncludedToppings int                            `json:"includedToppings"`
-	IncludedFruits   int                            `json:"includedFruits"`
-	IncludedExtras   int                            `json:"includedExtras"`
-	Tag              string                         `json:"tag"`
-	ImageURL         string                         `json:"imageUrl"`
-	ImageAlt         string                         `json:"imageAlt"`
-	Available        *bool                          `json:"available"`
-	SortOrder        int                            `json:"sortOrder"`
-	Items            []CatalogComboItemInput        `json:"items"`
-	GourmetSizes     []CatalogComboGourmetSizeInput `json:"gourmetSizes"`
+	Name             string                  `json:"name"`
+	SizeItemID       string                  `json:"sizeItemId"`
+	PriceCents       int                     `json:"priceCents"`
+	IncludedToppings int                     `json:"includedToppings"`
+	IncludedFruits   int                     `json:"includedFruits"`
+	IncludedExtras   int                     `json:"includedExtras"`
+	Tag              string                  `json:"tag"`
+	ImageURL         string                  `json:"imageUrl"`
+	ImageAlt         string                  `json:"imageAlt"`
+	Available        *bool                   `json:"available"`
+	SortOrder        int                     `json:"sortOrder"`
+	Items            []CatalogComboItemInput `json:"items"`
 }
 
 type UpdateCatalogComboRequest struct {
-	Name             *string                         `json:"name"`
-	Category         *string                         `json:"category"`
-	Description      *string                         `json:"description"`
-	SizeItemID       *string                         `json:"sizeItemId"`
-	PriceCents       *int                            `json:"priceCents"`
-	IncludedToppings *int                            `json:"includedToppings"`
-	IncludedFruits   *int                            `json:"includedFruits"`
-	IncludedExtras   *int                            `json:"includedExtras"`
-	Tag              *string                         `json:"tag"`
-	ImageURL         *string                         `json:"imageUrl"`
-	ImageAlt         *string                         `json:"imageAlt"`
-	Available        *bool                           `json:"available"`
-	SortOrder        *int                            `json:"sortOrder"`
-	Items            *[]CatalogComboItemInput        `json:"items"`
-	GourmetSizes     *[]CatalogComboGourmetSizeInput `json:"gourmetSizes"`
+	Name             *string                  `json:"name"`
+	SizeItemID       *string                  `json:"sizeItemId"`
+	PriceCents       *int                     `json:"priceCents"`
+	IncludedToppings *int                     `json:"includedToppings"`
+	IncludedFruits   *int                     `json:"includedFruits"`
+	IncludedExtras   *int                     `json:"includedExtras"`
+	Tag              *string                  `json:"tag"`
+	ImageURL         *string                  `json:"imageUrl"`
+	ImageAlt         *string                  `json:"imageAlt"`
+	Available        *bool                    `json:"available"`
+	SortOrder        *int                     `json:"sortOrder"`
+	Items            *[]CatalogComboItemInput `json:"items"`
 }

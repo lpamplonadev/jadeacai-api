@@ -19,28 +19,19 @@ type publicMenuItem struct {
 }
 
 type publicMenuCombo struct {
-	ID               string                  `json:"id"`
-	Key              string                  `json:"key"`
-	Category         string                  `json:"category"`
-	Name             string                  `json:"name"`
-	Description      string                  `json:"description"`
-	SizeID           string                  `json:"sizeId"`
-	Size             string                  `json:"size"`
-	PriceCents       int                     `json:"priceCents"`
-	IncludedToppings int                     `json:"includedToppings"`
-	IncludedFruits   int                     `json:"includedFruits"`
-	IncludedExtras   int                     `json:"includedExtras"`
-	Tag              string                  `json:"tag"`
-	ImageURL         string                  `json:"image"`
-	ImageAlt         string                  `json:"imageAlt"`
-	Items            []publicMenuComboItem   `json:"items"`
-	GourmetSizes     []publicMenuGourmetSize `json:"gourmetSizes,omitempty"`
-}
-
-type publicMenuGourmetSize struct {
-	SizeID     string `json:"sizeId"`
-	Size       string `json:"size"`
-	PriceCents int    `json:"priceCents"`
+	ID               string                `json:"id"`
+	Key              string                `json:"key"`
+	Name             string                `json:"name"`
+	SizeID           string                `json:"sizeId"`
+	Size             string                `json:"size"`
+	PriceCents       int                   `json:"priceCents"`
+	IncludedToppings int                   `json:"includedToppings"`
+	IncludedFruits   int                   `json:"includedFruits"`
+	IncludedExtras   int                   `json:"includedExtras"`
+	Tag              string                `json:"tag"`
+	ImageURL         string                `json:"image"`
+	ImageAlt         string                `json:"imageAlt"`
+	Items            []publicMenuComboItem `json:"items"`
 }
 
 type publicMenuComboItem struct {
@@ -50,10 +41,29 @@ type publicMenuComboItem struct {
 	Quantity int    `json:"quantity"`
 }
 
+type publicMenuGourmet struct {
+	ID          string                  `json:"id"`
+	Key         string                  `json:"key"`
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Tag         string                  `json:"tag"`
+	ImageURL    string                  `json:"image"`
+	ImageAlt    string                  `json:"imageAlt"`
+	Items       []publicMenuComboItem   `json:"items"`
+	Sizes       []publicMenuGourmetSize `json:"sizes"`
+}
+
+type publicMenuGourmetSize struct {
+	SizeID     string `json:"sizeId"`
+	Size       string `json:"size"`
+	PriceCents int    `json:"priceCents"`
+}
+
 type publicMenuCatalog struct {
-	Items  []publicMenuItem  `json:"items"`
-	Combos []publicMenuCombo `json:"combos"`
-	Rules  map[string]any    `json:"rules"`
+	Items    []publicMenuItem    `json:"items"`
+	Combos   []publicMenuCombo   `json:"combos"`
+	Gourmets []publicMenuGourmet `json:"gourmets"`
+	Rules    map[string]any      `json:"rules"`
 }
 
 func getMenuCatalog(store *application.Service) gin.HandlerFunc {
@@ -82,9 +92,10 @@ func getMenuCombos(store *application.Service) gin.HandlerFunc {
 
 func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 	result := publicMenuCatalog{
-		Items:  make([]publicMenuItem, 0),
-		Combos: make([]publicMenuCombo, 0),
-		Rules:  make(map[string]any, len(catalog.Rules)),
+		Items:    make([]publicMenuItem, 0),
+		Combos:   make([]publicMenuCombo, 0),
+		Gourmets: make([]publicMenuGourmet, 0),
+		Rules:    make(map[string]any, len(catalog.Rules)),
 	}
 	activeItems := make(map[string]catalogItemRecord)
 	activeMenuItems := make(map[string]publicMenuItem)
@@ -109,23 +120,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			continue
 		}
 		size, exists := activeItems[combo.SizeItemID]
-		gourmetSizes := make([]publicMenuGourmetSize, 0, len(combo.GourmetSizes))
-		if combo.Category == string(domain.CatalogCategoryGourmet) {
-			for _, gourmetSize := range combo.GourmetSizes {
-				activeSize, isAvailable := activeItems[gourmetSize.SizeItemID]
-				if !gourmetSize.Available || !isAvailable || activeSize.Kind != string(domain.CatalogSize) {
-					continue
-				}
-				gourmetSizes = append(gourmetSizes, publicMenuGourmetSize{
-					SizeID: gourmetSize.SizeItemID, Size: activeSize.Name, PriceCents: gourmetSize.PriceCents,
-				})
-			}
-			if len(gourmetSizes) == 0 {
-				continue
-			}
-			size = activeItems[gourmetSizes[0].SizeID]
-			exists = true
-		} else if !exists || size.Kind != string(domain.CatalogSize) {
+		if !exists || size.Kind != string(domain.CatalogSize) {
 			continue
 		}
 		comboItems := make([]publicMenuComboItem, 0, len(combo.Items))
@@ -146,19 +141,13 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 		if !allComboItemsAvailable {
 			continue
 		}
-		priceCents := combo.PriceCents
-		if len(gourmetSizes) > 0 {
-			priceCents = gourmetSizes[0].PriceCents
-		}
 		result.Combos = append(result.Combos, publicMenuCombo{
 			ID:               combo.ID,
 			Key:              combo.ComboKey,
-			Category:         combo.Category,
 			Name:             combo.Name,
-			Description:      combo.Description,
 			SizeID:           size.ID,
 			Size:             size.Name,
-			PriceCents:       priceCents,
+			PriceCents:       combo.PriceCents,
 			IncludedToppings: combo.IncludedToppings,
 			IncludedFruits:   combo.IncludedFruits,
 			IncludedExtras:   combo.IncludedExtras,
@@ -166,7 +155,45 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			ImageURL:         combo.ImageURL,
 			ImageAlt:         combo.ImageAlt,
 			Items:            comboItems,
-			GourmetSizes:     gourmetSizes,
+		})
+	}
+	for _, gourmet := range catalog.Gourmets {
+		if !gourmet.Available || gourmet.DeletedAt != nil {
+			continue
+		}
+		gourmetItems := make([]publicMenuComboItem, 0, len(gourmet.Items))
+		allItemsAvailable := true
+		for _, item := range gourmet.Items {
+			publicItem, itemAvailable := activeMenuItems[item.ItemID]
+			if !itemAvailable {
+				allItemsAvailable = false
+				break
+			}
+			gourmetItems = append(gourmetItems, publicMenuComboItem{
+				ID: item.ItemID, Kind: publicItem.Kind, Name: publicItem.Name, Quantity: item.Quantity,
+			})
+		}
+		if !allItemsAvailable {
+			continue
+		}
+		gourmetSizes := make([]publicMenuGourmetSize, 0, len(gourmet.Sizes))
+		for _, size := range gourmet.Sizes {
+			item, exists := activeMenuItems[size.SizeItemID]
+			if !size.Available || !exists || item.Kind != string(domain.CatalogSize) {
+				continue
+			}
+			gourmetSizes = append(gourmetSizes, publicMenuGourmetSize{
+				SizeID: size.SizeItemID, Size: item.Name, PriceCents: size.PriceCents,
+			})
+		}
+		if len(gourmetSizes) == 0 {
+			continue
+		}
+		result.Gourmets = append(result.Gourmets, publicMenuGourmet{
+			ID: gourmet.ID, Key: gourmet.GourmetKey, Name: gourmet.Name,
+			Description: gourmet.Description, Tag: gourmet.Tag,
+			ImageURL: gourmet.ImageURL, ImageAlt: gourmet.ImageAlt,
+			Items: gourmetItems, Sizes: gourmetSizes,
 		})
 	}
 	for _, rule := range catalog.Rules {

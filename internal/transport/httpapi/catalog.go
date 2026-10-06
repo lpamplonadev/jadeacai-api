@@ -167,9 +167,86 @@ func archiveCatalogCombo(store *application.Service) gin.HandlerFunc {
 	}
 }
 
+func createCatalogGourmet(store *application.Service) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		var request createCatalogGourmetRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet"})
+			return
+		}
+		gourmet, err := store.CreateGourmet(context.Request.Context(), request)
+		if errors.Is(err, application.ErrInvalidInput) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet"})
+			return
+		}
+		if errors.Is(err, application.ErrCatalogReference) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "Gourmet must reference active ingredients and sizes"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not create catalog Gourmet"})
+			return
+		}
+		context.JSON(http.StatusCreated, gourmet)
+	}
+}
+
+func updateCatalogGourmet(store *application.Service) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		gourmetID := context.Param("gourmetId")
+		if !domain.IsValidUUID(gourmetID) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet id"})
+			return
+		}
+		var request updateCatalogGourmetRequest
+		if err := context.ShouldBindJSON(&request); err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet"})
+			return
+		}
+		gourmet, found, err := store.UpdateGourmet(context.Request.Context(), gourmetID, request)
+		if errors.Is(err, application.ErrInvalidInput) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet values"})
+			return
+		}
+		if errors.Is(err, application.ErrCatalogReference) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "Gourmet must reference active ingredients and sizes"})
+			return
+		}
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not update catalog Gourmet"})
+			return
+		}
+		if !found {
+			context.JSON(http.StatusNotFound, gin.H{"error": "catalog Gourmet not found"})
+			return
+		}
+		context.JSON(http.StatusOK, gourmet)
+	}
+}
+
+func archiveCatalogGourmet(store *application.Service) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		gourmetID := context.Param("gourmetId")
+		if !domain.IsValidUUID(gourmetID) {
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid catalog Gourmet id"})
+			return
+		}
+		archived, err := store.ArchiveCatalogGourmet(context.Request.Context(), gourmetID)
+		if err != nil {
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not archive catalog Gourmet"})
+			return
+		}
+		if !archived {
+			context.JSON(http.StatusNotFound, gin.H{"error": "catalog Gourmet not found"})
+			return
+		}
+		context.Status(http.StatusNoContent)
+	}
+}
+
 func hasCatalogComboUpdate(request updateCatalogComboRequest) bool {
 	return request.Name != nil || request.SizeItemID != nil || request.PriceCents != nil ||
-		request.Description != nil || request.GourmetSizes != nil || request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
+		request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
 		request.Tag != nil || request.ImageURL != nil || request.ImageAlt != nil ||
 		request.Available != nil || request.SortOrder != nil || request.Items != nil
 }

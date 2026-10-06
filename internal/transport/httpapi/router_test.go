@@ -44,6 +44,10 @@ type testOrderStore struct {
 	updatedCombo    catalogComboRecord
 	comboFound      bool
 	comboArchived   bool
+	createdGourmet  catalogGourmetRecord
+	updatedGourmet  catalogGourmetRecord
+	gourmetFound    bool
+	gourmetArchived bool
 }
 
 func (store *testOrderStore) Create(_ context.Context, request createOrderRequest) (createdOrder, error) {
@@ -114,6 +118,18 @@ func (store *testOrderStore) UpdateCatalogCombo(_ context.Context, _ string, _ u
 
 func (store *testOrderStore) ArchiveCatalogCombo(_ context.Context, _ string) (bool, error) {
 	return store.comboArchived, nil
+}
+
+func (store *testOrderStore) CreateCatalogGourmet(_ context.Context, _ createCatalogGourmetRequest, _ string, _ bool) (catalogGourmetRecord, error) {
+	return store.createdGourmet, nil
+}
+
+func (store *testOrderStore) UpdateCatalogGourmet(_ context.Context, _ string, _ updateCatalogGourmetRequest) (catalogGourmetRecord, bool, error) {
+	return store.updatedGourmet, store.gourmetFound, nil
+}
+
+func (store *testOrderStore) ArchiveCatalogGourmet(_ context.Context, _ string) (bool, error) {
+	return store.gourmetArchived, nil
 }
 
 func newRouter(repository application.Repository) *gin.Engine {
@@ -593,18 +609,23 @@ func TestPublicMenuCatalogExcludesUnavailableRecords(t *testing.T) {
 	}
 }
 
-func TestPublicMenuCatalogIncludesComboCategory(t *testing.T) {
+func TestPublicMenuCatalogIncludesStandaloneGourmet(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &testOrderStore{catalog: catalogData{
-		Items: []catalogItemRecord{{
-			ID: "size-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Available: true,
-		}},
-		Combos: []catalogComboRecord{{
-			ID: "gourmet-combo-id", ComboKey: "combo-gourmet", Category: "gourmet",
-			Name: "Banoffe", Description: "Açaí cremoso com banana e doce de leite.",
-			SizeItemID: "size-id", SizeName: "500 ml", Available: true,
-			GourmetSizes: []catalogComboGourmetSizeRecord{{
-				SizeItemID: "size-id", SizeName: "500 ml", PriceCents: 2500, Available: true,
+		Items: []catalogItemRecord{
+			{ID: "size-330-id", ItemKey: "size-330", Kind: "size", Name: "330 ml", Available: true},
+			{ID: "flavor-id", ItemKey: "flavor-banana", Kind: "flavor", Name: "Açaí de banana", Available: true},
+			{ID: "banana-id", ItemKey: "fruit-banana", Kind: "fruit", Name: "Banana", Available: true},
+		},
+		Gourmets: []catalogGourmetRecord{{
+			ID: "gourmet-id", GourmetKey: "gourmet-banoffe", Name: "Banoffe",
+			Description: "Açaí de banana com doce de leite.", Available: true,
+			Items: []catalogComboItemRecord{
+				{ItemID: "flavor-id", Kind: "flavor", Name: "Açaí de banana", Quantity: 1, Available: true},
+				{ItemID: "banana-id", Kind: "fruit", Name: "Banana", Quantity: 1, Available: true},
+			},
+			Sizes: []catalogGourmetSizeRecord{{
+				SizeItemID: "size-330-id", SizeName: "330 ml", PriceCents: 2490, Available: true,
 			}},
 		}},
 	}}
@@ -620,9 +641,8 @@ func TestPublicMenuCatalogIncludesComboCategory(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(body.Combos) != 1 || body.Combos[0].Category != "gourmet" || body.Combos[0].Description == "" ||
-		len(body.Combos[0].GourmetSizes) != 1 || body.Combos[0].GourmetSizes[0].PriceCents != 2500 {
-		t.Fatalf("expected Gourmet description and sizes in public catalog, got %+v", body.Combos)
+	if len(body.Combos) != 0 || len(body.Gourmets) != 1 || body.Gourmets[0].Sizes[0].PriceCents != 2490 {
+		t.Fatalf("expected separate Gourmet with its size price, got %+v", body)
 	}
 }
 
@@ -665,7 +685,7 @@ func TestCreateOrderEndpoint(t *testing.T) {
 func TestCreateOrderAcceptsMultipleCartItems(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &testOrderStore{created: createdOrder{ID: "order-456", OrderNumber: 8, OrderDate: "2026-09-30"}}
-	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500"},"items":[{"id":"line-1","name":"Combo 500 ml","description":"Açaí de banana · 500 ml · Paçoca","acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"none","condimentPositionId":"bottom","fruitIds":[],"extraIds":[]},"estimatedSubtotalCents":1690},{"id":"line-2","name":"Açaí livre 300 ml","description":"Açaí de morango · 300 ml · Banana","acai":{"flavorId":"morango","sizeId":"300","comboId":"","toppingIds":[],"sauceId":"chocolate","condimentPositionId":"top","fruitIds":["banana"],"extraIds":[]},"estimatedSubtotalCents":1390}],"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro"},"payment":{"method":"pix"},"notes":"","estimatedTotalCents":3380}`
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500"},"items":[{"id":"line-1","name":"Combo 500 ml","description":"Açaí de banana · 500 ml · Paçoca","acai":{"flavorId":"banana","sizeId":"500","comboId":"combo-500","toppingIds":["pacoca"],"sauceId":"none","condimentPositionId":"bottom","fruitIds":[],"extraIds":[]},"estimatedSubtotalCents":1690},{"id":"line-2","name":"Gourmet Banoffe · 330 ml","description":"Açaí de banana · banana · doce de leite","acai":{"flavorId":"banana","sizeId":"330","comboId":"gourmet-banoffe","toppingIds":[],"sauceId":"none","condimentPositionId":"bottom","fruitIds":["banana"],"extraIds":[]},"estimatedSubtotalCents":2490}],"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Centro"},"payment":{"method":"pix"},"notes":"","estimatedTotalCents":4180}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -675,7 +695,7 @@ func TestCreateOrderAcceptsMultipleCartItems(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, response.Code, response.Body.String())
 	}
-	if !store.called || len(store.order.Items) != 2 || store.order.Items[1].Name != "Açaí livre 300 ml" || store.order.Items[1].Description != "Açaí de morango · 300 ml · Banana" {
+	if !store.called || len(store.order.Items) != 2 || store.order.Items[1].Name != "Gourmet Banoffe · 330 ml" || store.order.Items[1].Description != "Açaí de banana · banana · doce de leite" {
 		t.Fatalf("expected both cart items to be persisted, got %+v", store.order.Items)
 	}
 }

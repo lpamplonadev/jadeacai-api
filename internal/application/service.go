@@ -29,6 +29,9 @@ type Repository interface {
 	CreateCatalogCombo(context.Context, CreateCatalogComboRequest, string, bool) (CatalogComboRecord, error)
 	UpdateCatalogCombo(context.Context, string, UpdateCatalogComboRequest) (CatalogComboRecord, bool, error)
 	ArchiveCatalogCombo(context.Context, string) (bool, error)
+	CreateCatalogGourmet(context.Context, CreateCatalogGourmetRequest, string, bool) (CatalogGourmetRecord, error)
+	UpdateCatalogGourmet(context.Context, string, UpdateCatalogGourmetRequest) (CatalogGourmetRecord, bool, error)
+	ArchiveCatalogGourmet(context.Context, string) (bool, error)
 }
 
 type Service struct {
@@ -181,14 +184,6 @@ func (service *Service) ArchiveCatalogItem(ctx context.Context, itemID string) (
 
 func (service *Service) CreateCombo(ctx context.Context, request CreateCatalogComboRequest) (CatalogComboRecord, error) {
 	request.Name = strings.TrimSpace(request.Name)
-	request.Description = strings.TrimSpace(request.Description)
-	if request.Category == "" {
-		request.Category = string(domain.CatalogCategoryCombo)
-	}
-	if request.Category == string(domain.CatalogCategoryGourmet) && len(request.GourmetSizes) > 0 {
-		request.SizeItemID = request.GourmetSizes[0].SizeItemID
-		request.PriceCents = request.GourmetSizes[0].PriceCents
-	}
 	if err := validateCatalogCombo(request); err != nil {
 		return CatalogComboRecord{}, err
 	}
@@ -207,27 +202,6 @@ func (service *Service) UpdateCombo(ctx context.Context, comboID string, request
 			return CatalogComboRecord{}, false, ErrInvalidInput
 		}
 		request.Name = &name
-	}
-	if request.Description != nil {
-		description := strings.TrimSpace(*request.Description)
-		if len(description) > 1200 {
-			return CatalogComboRecord{}, false, ErrInvalidInput
-		}
-		request.Description = &description
-	}
-	if request.GourmetSizes != nil {
-		if len(*request.GourmetSizes) > 0 {
-			if err := validateCatalogGourmetSizes(*request.GourmetSizes); err != nil {
-				return CatalogComboRecord{}, false, err
-			}
-		}
-		if len(*request.GourmetSizes) > 0 {
-			request.SizeItemID = &(*request.GourmetSizes)[0].SizeItemID
-			request.PriceCents = &(*request.GourmetSizes)[0].PriceCents
-		}
-	}
-	if request.Category != nil && !domain.IsCatalogCategory(*request.Category) {
-		return CatalogComboRecord{}, false, ErrInvalidInput
 	}
 	if (request.PriceCents != nil && *request.PriceCents < 0) ||
 		(request.IncludedToppings != nil && *request.IncludedToppings < 0) ||
@@ -250,27 +224,62 @@ func (service *Service) ArchiveCatalogCombo(ctx context.Context, comboID string)
 	return service.repository.ArchiveCatalogCombo(ctx, comboID)
 }
 
-func validateCatalogCombo(request CreateCatalogComboRequest) error {
-	if request.Name == "" || len(request.Name) > 120 || !domain.IsCatalogCategory(request.Category) || !domain.IsValidUUID(request.SizeItemID) ||
-		request.PriceCents < 0 || request.IncludedToppings < 0 || request.IncludedFruits < 0 ||
-		request.IncludedExtras < 0 || request.SortOrder < 0 || len(request.Description) > 1200 {
-		return ErrInvalidInput
+func (service *Service) CreateGourmet(ctx context.Context, request CreateCatalogGourmetRequest) (CatalogGourmetRecord, error) {
+	request.Name = strings.TrimSpace(request.Name)
+	request.Description = strings.TrimSpace(request.Description)
+	if err := validateCatalogGourmet(request.Name, request.Description, request.SortOrder, request.Items, request.Sizes); err != nil {
+		return CatalogGourmetRecord{}, err
 	}
-	if request.Category == string(domain.CatalogCategoryGourmet) {
-		if strings.TrimSpace(request.Description) == "" || len(request.Items) < 2 {
-			return ErrInvalidInput
-		}
-		if err := validateCatalogGourmetSizes(request.GourmetSizes); err != nil {
-			return err
-		}
+	gourmetKey, err := newCatalogKey("gourmet")
+	if err != nil {
+		return CatalogGourmetRecord{}, fmt.Errorf("create catalog Gourmet key: %w", err)
 	}
-	if request.Category != string(domain.CatalogCategoryGourmet) && len(request.GourmetSizes) > 0 {
-		return ErrInvalidInput
-	}
-	return validateComboItems(request.Items)
+	available := request.Available == nil || *request.Available
+	return service.repository.CreateCatalogGourmet(ctx, request, gourmetKey, available)
 }
 
-func validateCatalogGourmetSizes(sizes []CatalogComboGourmetSizeInput) error {
+func (service *Service) UpdateGourmet(ctx context.Context, gourmetID string, request UpdateCatalogGourmetRequest) (CatalogGourmetRecord, bool, error) {
+	if request.Name != nil {
+		name := strings.TrimSpace(*request.Name)
+		if name == "" || len(name) > 120 {
+			return CatalogGourmetRecord{}, false, ErrInvalidInput
+		}
+		request.Name = &name
+	}
+	if request.Description != nil {
+		description := strings.TrimSpace(*request.Description)
+		if description == "" || len(description) > 1200 {
+			return CatalogGourmetRecord{}, false, ErrInvalidInput
+		}
+		request.Description = &description
+	}
+	if (request.SortOrder != nil && *request.SortOrder < 0) ||
+		(request.Items != nil && validateComboItems(*request.Items) != nil) ||
+		(request.Sizes != nil && validateCatalogGourmetSizesForProduct(*request.Sizes) != nil) ||
+		!hasCatalogGourmetUpdate(request) {
+		return CatalogGourmetRecord{}, false, ErrInvalidInput
+	}
+	return service.repository.UpdateCatalogGourmet(ctx, gourmetID, request)
+}
+
+func (service *Service) ArchiveCatalogGourmet(ctx context.Context, gourmetID string) (bool, error) {
+	return service.repository.ArchiveCatalogGourmet(ctx, gourmetID)
+}
+
+func validateCatalogGourmet(name, description string, sortOrder int, items []CatalogComboItemInput, sizes []CatalogGourmetSizeInput) error {
+	if name == "" || len(name) > 120 || description == "" || len(description) > 1200 || sortOrder < 0 || len(items) < 2 {
+		return ErrInvalidInput
+	}
+	if err := validateComboItems(items); err != nil {
+		return err
+	}
+	if err := validateCatalogGourmetSizesForProduct(sizes); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCatalogGourmetSizesForProduct(sizes []CatalogGourmetSizeInput) error {
 	if len(sizes) == 0 || len(sizes) > 10 {
 		return ErrInvalidInput
 	}
@@ -285,6 +294,21 @@ func validateCatalogGourmetSizes(sizes []CatalogComboGourmetSizeInput) error {
 		seen[size.SizeItemID] = struct{}{}
 	}
 	return nil
+}
+
+func hasCatalogGourmetUpdate(request UpdateCatalogGourmetRequest) bool {
+	return request.Name != nil || request.Description != nil || request.Tag != nil ||
+		request.ImageURL != nil || request.ImageAlt != nil || request.Available != nil ||
+		request.SortOrder != nil || request.Items != nil || request.Sizes != nil
+}
+
+func validateCatalogCombo(request CreateCatalogComboRequest) error {
+	if request.Name == "" || len(request.Name) > 120 || !domain.IsValidUUID(request.SizeItemID) ||
+		request.PriceCents < 0 || request.IncludedToppings < 0 || request.IncludedFruits < 0 ||
+		request.IncludedExtras < 0 || request.SortOrder < 0 {
+		return ErrInvalidInput
+	}
+	return validateComboItems(request.Items)
 }
 
 func validateComboItems(items []CatalogComboItemInput) error {
@@ -308,7 +332,6 @@ func validateComboItems(items []CatalogComboItemInput) error {
 
 func hasCatalogComboUpdate(request UpdateCatalogComboRequest) bool {
 	return request.Name != nil || request.SizeItemID != nil || request.PriceCents != nil ||
-		request.Category != nil || request.Description != nil || request.GourmetSizes != nil ||
 		request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
 		request.Tag != nil || request.ImageURL != nil || request.ImageAlt != nil ||
 		request.Available != nil || request.SortOrder != nil || request.Items != nil

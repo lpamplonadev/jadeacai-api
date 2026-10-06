@@ -45,6 +45,9 @@ func NewRouter(service *application.Service, adminAPIKey string) *gin.Engine {
 	adminRoutes.POST("/catalog/combos", createCatalogCombo(service))
 	adminRoutes.PATCH("/catalog/combos/:comboId", updateCatalogCombo(service))
 	adminRoutes.DELETE("/catalog/combos/:comboId", archiveCatalogCombo(service))
+	adminRoutes.POST("/catalog/gourmets", createCatalogGourmet(service))
+	adminRoutes.PATCH("/catalog/gourmets/:gourmetId", updateCatalogGourmet(service))
+	adminRoutes.DELETE("/catalog/gourmets/:gourmetId", archiveCatalogGourmet(service))
 
 	return router
 }

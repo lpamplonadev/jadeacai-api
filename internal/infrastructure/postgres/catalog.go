@@ -24,9 +24,10 @@ type catalogRowScanner interface {
 
 func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	result := catalogData{
-		Items:  make([]catalogItemRecord, 0),
-		Combos: make([]catalogComboRecord, 0),
-		Rules:  make([]catalogRuleRecord, 0),
+		Items:    make([]catalogItemRecord, 0),
+		Combos:   make([]catalogComboRecord, 0),
+		Gourmets: make([]catalogGourmetRecord, 0),
+		Rules:    make([]catalogRuleRecord, 0),
 	}
 
 	items, err := store.db.QueryContext(ctx, `
@@ -52,7 +53,7 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	items.Close()
 
 	combos, err := store.db.QueryContext(ctx, `
-		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.description, c.size_item_id::text, size.name,
+		SELECT c.id::text, c.combo_key, c.name, c.size_item_id::text, size.name,
 			c.price_cents, c.included_toppings, c.included_fruits, c.included_extras,
 			c.tag, c.image_url, c.image_alt, c.available, c.sort_order, c.deleted_at
 		FROM catalog_combos AS c
@@ -69,9 +70,7 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 		if err := combos.Scan(
 			&combo.ID,
 			&combo.ComboKey,
-			&combo.Category,
 			&combo.Name,
-			&combo.Description,
 			&combo.SizeItemID,
 			&combo.SizeName,
 			&combo.PriceCents,
@@ -90,7 +89,6 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 		}
 		combo.DeletedAt = formatCatalogTimestamp(deletedAt)
 		combo.Items = make([]catalogComboItemRecord, 0)
-		combo.GourmetSizes = make([]catalogComboGourmetSizeRecord, 0)
 		comboIndexes[combo.ID] = len(result.Combos)
 		result.Combos = append(result.Combos, combo)
 	}
@@ -127,33 +125,6 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	}
 	comboItems.Close()
 
-	gourmetSizes, err := store.db.QueryContext(ctx, `
-		SELECT sizes.combo_id::text, item.id::text, item.name, sizes.price_cents,
-			item.available AND item.deleted_at IS NULL
-		FROM catalog_combo_gourmet_sizes AS sizes
-		JOIN catalog_items AS item ON item.id = sizes.size_item_id
-		ORDER BY sizes.sort_order, item.sort_order, item.name
-	`)
-	if err != nil {
-		return catalogData{}, fmt.Errorf("query Gourmet size prices: %w", err)
-	}
-	for gourmetSizes.Next() {
-		var comboID string
-		var size catalogComboGourmetSizeRecord
-		if err := gourmetSizes.Scan(&comboID, &size.SizeItemID, &size.SizeName, &size.PriceCents, &size.Available); err != nil {
-			gourmetSizes.Close()
-			return catalogData{}, fmt.Errorf("scan Gourmet size price: %w", err)
-		}
-		if index, exists := comboIndexes[comboID]; exists {
-			result.Combos[index].GourmetSizes = append(result.Combos[index].GourmetSizes, size)
-		}
-	}
-	if err := gourmetSizes.Err(); err != nil {
-		gourmetSizes.Close()
-		return catalogData{}, fmt.Errorf("iterate Gourmet size prices: %w", err)
-	}
-	gourmetSizes.Close()
-
 	rules, err := store.db.QueryContext(ctx, `SELECT rule_key, rule_value FROM catalog_rules ORDER BY rule_key`)
 	if err != nil {
 		return catalogData{}, fmt.Errorf("query catalog rules: %w", err)
@@ -175,6 +146,36 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	}
 	if err := rules.Err(); err != nil {
 		return catalogData{}, fmt.Errorf("iterate catalog rules: %w", err)
+	}
+
+	gourmetRows, err := store.db.QueryContext(ctx, `
+		SELECT id::text
+		FROM catalog_gourmet
+		ORDER BY sort_order, name
+	`)
+	if err != nil {
+		return catalogData{}, fmt.Errorf("query catalog Gourmets: %w", err)
+	}
+	gourmetIDs := make([]string, 0)
+	for gourmetRows.Next() {
+		var gourmetID string
+		if err := gourmetRows.Scan(&gourmetID); err != nil {
+			gourmetRows.Close()
+			return catalogData{}, fmt.Errorf("scan catalog Gourmet id: %w", err)
+		}
+		gourmetIDs = append(gourmetIDs, gourmetID)
+	}
+	if err := gourmetRows.Err(); err != nil {
+		gourmetRows.Close()
+		return catalogData{}, fmt.Errorf("iterate catalog Gourmet ids: %w", err)
+	}
+	gourmetRows.Close()
+	for _, gourmetID := range gourmetIDs {
+		gourmet, err := loadCatalogGourmet(ctx, store.db, gourmetID)
+		if err != nil {
+			return catalogData{}, fmt.Errorf("load catalog Gourmet: %w", err)
+		}
+		result.Gourmets = append(result.Gourmets, gourmet)
 	}
 
 	return result, nil
@@ -247,25 +248,18 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 	if err := validateCatalogReferences(ctx, tx, request.SizeItemID, request.Items, "", nil); err != nil {
 		return catalogComboRecord{}, err
 	}
-	if request.Category == string(domain.CatalogCategoryGourmet) {
-		if err := validateCatalogGourmetSizeReferences(ctx, tx, request.GourmetSizes, nil); err != nil {
-			return catalogComboRecord{}, err
-		}
-	}
 	const query = `
 		INSERT INTO catalog_combos (
-			combo_key, store_category, name, description, size_item_id, price_cents, included_toppings,
+			combo_key, name, size_item_id, price_cents, included_toppings,
 			included_fruits, included_extras, tag, image_url, image_alt, available, sort_order
 		)
-		VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id::text
 	`
 	var comboID string
 	err = tx.QueryRowContext(ctx, query,
 		comboKey,
-		request.Category,
 		strings.TrimSpace(request.Name),
-		strings.TrimSpace(request.Description),
 		request.SizeItemID,
 		request.PriceCents,
 		request.IncludedToppings,
@@ -282,11 +276,6 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 	}
 	if err := insertCatalogComboItems(ctx, tx, comboID, request.Items); err != nil {
 		return catalogComboRecord{}, err
-	}
-	if request.Category == string(domain.CatalogCategoryGourmet) {
-		if err := insertCatalogComboGourmetSizes(ctx, tx, comboID, request.GourmetSizes); err != nil {
-			return catalogComboRecord{}, err
-		}
 	}
 	combo, err := loadCatalogCombo(ctx, tx, comboID)
 	if err != nil {
@@ -325,28 +314,12 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 	if request.Items != nil {
 		items = *request.Items
 	}
-	gourmetSizes := make([]catalogComboGourmetSizeInput, 0, len(combo.GourmetSizes))
-	for _, size := range combo.GourmetSizes {
-		gourmetSizes = append(gourmetSizes, catalogComboGourmetSizeInput{
-			SizeItemID: size.SizeItemID,
-			PriceCents: size.PriceCents,
-		})
-	}
-	if request.GourmetSizes != nil {
-		gourmetSizes = *request.GourmetSizes
-	}
 	if err := validateCatalogReferences(ctx, tx, combo.SizeItemID, items, previousSizeItemID, previousItems); err != nil {
 		return catalogComboRecord{}, false, err
 	}
 
 	if request.Name != nil {
 		combo.Name = strings.TrimSpace(*request.Name)
-	}
-	if request.Category != nil {
-		combo.Category = *request.Category
-	}
-	if request.Description != nil {
-		combo.Description = strings.TrimSpace(*request.Description)
 	}
 	if request.PriceCents != nil {
 		combo.PriceCents = *request.PriceCents
@@ -375,26 +348,13 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 	if request.SortOrder != nil {
 		combo.SortOrder = *request.SortOrder
 	}
-	if combo.Category == string(domain.CatalogCategoryGourmet) &&
-		(strings.TrimSpace(combo.Description) == "" || len(items) < 2 || len(gourmetSizes) == 0) {
-		return catalogComboRecord{}, false, application.ErrInvalidInput
-	}
-	if combo.Category != string(domain.CatalogCategoryGourmet) && len(gourmetSizes) > 0 {
-		gourmetSizes = nil
-	}
-	if request.GourmetSizes != nil && len(gourmetSizes) > 0 {
-		if err := validateCatalogGourmetSizeReferences(ctx, tx, gourmetSizes, combo.GourmetSizes); err != nil {
-			return catalogComboRecord{}, false, err
-		}
-	}
-
 	const updateQuery = `
 		UPDATE catalog_combos
 		SET name = $1, size_item_id = $2::uuid, price_cents = $3,
 			included_toppings = $4, included_fruits = $5, included_extras = $6,
 			tag = $7, image_url = $8, image_alt = $9, available = $10,
-			sort_order = $11, store_category = $12, updated_at = now(), description = $14
-		WHERE id = $13::uuid AND deleted_at IS NULL
+			sort_order = $11, updated_at = now()
+		WHERE id = $12::uuid AND deleted_at IS NULL
 	`
 	if _, err := tx.ExecContext(ctx, updateQuery,
 		combo.Name,
@@ -408,9 +368,7 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 		combo.ImageAlt,
 		combo.Available,
 		combo.SortOrder,
-		combo.Category,
 		comboID,
-		combo.Description,
 	); err != nil {
 		return catalogComboRecord{}, false, fmt.Errorf("update catalog combo: %w", err)
 	}
@@ -420,16 +378,6 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 		}
 		if err := insertCatalogComboItems(ctx, tx, comboID, *request.Items); err != nil {
 			return catalogComboRecord{}, false, err
-		}
-	}
-	if request.GourmetSizes != nil || combo.Category != string(domain.CatalogCategoryGourmet) {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM catalog_combo_gourmet_sizes WHERE combo_id = $1::uuid`, comboID); err != nil {
-			return catalogComboRecord{}, false, fmt.Errorf("replace Gourmet size prices: %w", err)
-		}
-		if combo.Category == string(domain.CatalogCategoryGourmet) {
-			if err := insertCatalogComboGourmetSizes(ctx, tx, comboID, gourmetSizes); err != nil {
-				return catalogComboRecord{}, false, err
-			}
 		}
 	}
 	updated, err := loadCatalogCombo(ctx, tx, comboID)
@@ -482,8 +430,8 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	var combo catalogComboRecord
 	var deletedAt sql.NullTime
 	err := queryer.QueryRowContext(ctx, `
-		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.description, c.size_item_id::text, size.name,
-			c.price_cents, c.included_toppings, c.included_fruits, c.included_extras,
+		SELECT c.id::text, c.combo_key, c.name, c.size_item_id::text, size.name,
+		c.price_cents, c.included_toppings, c.included_fruits, c.included_extras,
 			c.tag, c.image_url, c.image_alt, c.available, c.sort_order, c.deleted_at
 		FROM catalog_combos AS c
 		JOIN catalog_items AS size ON size.id = c.size_item_id
@@ -491,9 +439,7 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	`, comboID).Scan(
 		&combo.ID,
 		&combo.ComboKey,
-		&combo.Category,
 		&combo.Name,
-		&combo.Description,
 		&combo.SizeItemID,
 		&combo.SizeName,
 		&combo.PriceCents,
@@ -537,64 +483,7 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	if err := rows.Close(); err != nil {
 		return catalogComboRecord{}, fmt.Errorf("close combo item links: %w", err)
 	}
-	combo.GourmetSizes, err = loadCatalogComboGourmetSizes(ctx, queryer, comboID)
-	if err != nil {
-		return catalogComboRecord{}, err
-	}
 	return combo, nil
-}
-
-func loadCatalogComboGourmetSizes(ctx context.Context, queryer catalogQueryer, comboID string) ([]catalogComboGourmetSizeRecord, error) {
-	rows, err := queryer.QueryContext(ctx, `
-		SELECT item.id::text, item.name, sizes.price_cents,
-			item.available AND item.deleted_at IS NULL
-		FROM catalog_combo_gourmet_sizes AS sizes
-		JOIN catalog_items AS item ON item.id = sizes.size_item_id
-		WHERE sizes.combo_id = $1::uuid
-		ORDER BY sizes.sort_order, item.sort_order, item.name
-	`, comboID)
-	if err != nil {
-		return nil, fmt.Errorf("query Gourmet size prices: %w", err)
-	}
-	defer rows.Close()
-
-	sizes := make([]catalogComboGourmetSizeRecord, 0)
-	for rows.Next() {
-		var size catalogComboGourmetSizeRecord
-		if err := rows.Scan(&size.SizeItemID, &size.SizeName, &size.PriceCents, &size.Available); err != nil {
-			return nil, fmt.Errorf("scan Gourmet size price: %w", err)
-		}
-		sizes = append(sizes, size)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate Gourmet size prices: %w", err)
-	}
-	return sizes, nil
-}
-
-func validateCatalogGourmetSizeReferences(ctx context.Context, queryer catalogQueryer, sizes []catalogComboGourmetSizeInput, previous []catalogComboGourmetSizeRecord) error {
-	previousIDs := make(map[string]struct{}, len(previous))
-	for _, size := range previous {
-		previousIDs[size.SizeItemID] = struct{}{}
-	}
-	for _, size := range sizes {
-		if _, wasAlreadyLinked := previousIDs[size.SizeItemID]; wasAlreadyLinked {
-			continue
-		}
-		var isActiveSize bool
-		if err := queryer.QueryRowContext(ctx, `
-			SELECT EXISTS (
-				SELECT 1 FROM catalog_items
-				WHERE id = $1::uuid AND kind = 'size' AND available AND deleted_at IS NULL
-			)
-		`, size.SizeItemID).Scan(&isActiveSize); err != nil {
-			return fmt.Errorf("validate Gourmet size: %w", err)
-		}
-		if !isActiveSize {
-			return application.ErrCatalogReference
-		}
-	}
-	return nil
 }
 
 func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, sizeItemID string, items []catalogComboItemInput, previousSizeItemID string, previousItems []catalogComboItemRecord) error {
@@ -644,18 +533,6 @@ func insertCatalogComboItems(ctx context.Context, tx *sql.Tx, comboID string, it
 			VALUES ($1::uuid, $2::uuid, $3)
 		`, comboID, item.ItemID, item.Quantity); err != nil {
 			return fmt.Errorf("insert combo item link: %w", err)
-		}
-	}
-	return nil
-}
-
-func insertCatalogComboGourmetSizes(ctx context.Context, tx *sql.Tx, comboID string, sizes []catalogComboGourmetSizeInput) error {
-	for index, size := range sizes {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO catalog_combo_gourmet_sizes (combo_id, size_item_id, price_cents, sort_order)
-			VALUES ($1::uuid, $2::uuid, $3, $4)
-		`, comboID, size.SizeItemID, size.PriceCents, index); err != nil {
-			return fmt.Errorf("insert Gourmet size price: %w", err)
 		}
 	}
 	return nil
