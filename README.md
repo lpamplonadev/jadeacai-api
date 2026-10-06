@@ -62,10 +62,10 @@ A resposta contém `{ "combos": [...] }`, com preços em centavos (`priceCents`)
 
 ## CORS
 
-Por padrão, a API permite chamadas do frontend publicado em `https://jadeacai-web.vercel.app` e dos frontends locais em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão. No Render, defina essa variável nas configurações do serviço (o arquivo `.env` local não é enviado ao deploy):
+Por padrão, a API permite chamadas do frontend publicado em `https://jadesacai.vercel.app` e dos frontends locais em `http://localhost:3000` e `http://127.0.0.1:3000`. Para usar outra allowlist, configure `CORS_ALLOWED_ORIGINS` com a lista completa de origens permitidas, separadas por vírgulas, antes de iniciar a API. Essa configuração substitui a lista padrão. No Render, defina essa variável nas configurações do serviço (o arquivo `.env` local não é enviado ao deploy):
 
 ```powershell
-$env:CORS_ALLOWED_ORIGINS = "https://jadeacai-web.vercel.app"
+$env:CORS_ALLOWED_ORIGINS = "https://jadesacai.vercel.app"
 air
 ```
 

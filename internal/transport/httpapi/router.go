@@ -70,7 +70,7 @@ func allowedCORSOrigins() []string {
 
 func defaultCORSOrigins() []string {
 	return []string{
-		"https://jadeacai-web.vercel.app",
+		"https://jadesacai.vercel.app",
 		"http://localhost:3000",
 		"http://127.0.0.1:3000",
 	}

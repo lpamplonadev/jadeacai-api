@@ -478,12 +478,12 @@ func TestCORSAllowsDeployedFrontendByDefault(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
-	request.Header.Set("Origin", "https://jadeacai-web.vercel.app")
+	request.Header.Set("Origin", "https://jadesacai.vercel.app")
 	response := httptest.NewRecorder()
 
 	newRouter(nil).ServeHTTP(response, request)
 
-	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://jadeacai-web.vercel.app" {
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://jadesacai.vercel.app" {
 		t.Fatalf("unexpected allow-origin header: %q", got)
 	}
 }
