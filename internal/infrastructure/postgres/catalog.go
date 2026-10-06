@@ -90,6 +90,7 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 		}
 		combo.DeletedAt = formatCatalogTimestamp(deletedAt)
 		combo.Items = make([]catalogComboItemRecord, 0)
+		combo.GourmetSizes = make([]catalogComboGourmetSizeRecord, 0)
 		comboIndexes[combo.ID] = len(result.Combos)
 		result.Combos = append(result.Combos, combo)
 	}
@@ -125,6 +126,33 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 		return catalogData{}, fmt.Errorf("iterate catalog combo items: %w", err)
 	}
 	comboItems.Close()
+
+	gourmetSizes, err := store.db.QueryContext(ctx, `
+		SELECT sizes.combo_id::text, item.id::text, item.name, sizes.price_cents,
+			item.available AND item.deleted_at IS NULL
+		FROM catalog_combo_gourmet_sizes AS sizes
+		JOIN catalog_items AS item ON item.id = sizes.size_item_id
+		ORDER BY sizes.sort_order, item.sort_order, item.name
+	`)
+	if err != nil {
+		return catalogData{}, fmt.Errorf("query Gourmet size prices: %w", err)
+	}
+	for gourmetSizes.Next() {
+		var comboID string
+		var size catalogComboGourmetSizeRecord
+		if err := gourmetSizes.Scan(&comboID, &size.SizeItemID, &size.SizeName, &size.PriceCents, &size.Available); err != nil {
+			gourmetSizes.Close()
+			return catalogData{}, fmt.Errorf("scan Gourmet size price: %w", err)
+		}
+		if index, exists := comboIndexes[comboID]; exists {
+			result.Combos[index].GourmetSizes = append(result.Combos[index].GourmetSizes, size)
+		}
+	}
+	if err := gourmetSizes.Err(); err != nil {
+		gourmetSizes.Close()
+		return catalogData{}, fmt.Errorf("iterate Gourmet size prices: %w", err)
+	}
+	gourmetSizes.Close()
 
 	rules, err := store.db.QueryContext(ctx, `SELECT rule_key, rule_value FROM catalog_rules ORDER BY rule_key`)
 	if err != nil {
@@ -219,6 +247,11 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 	if err := validateCatalogReferences(ctx, tx, request.SizeItemID, request.Items, "", nil); err != nil {
 		return catalogComboRecord{}, err
 	}
+	if request.Category == string(domain.CatalogCategoryGourmet) {
+		if err := validateCatalogGourmetSizeReferences(ctx, tx, request.GourmetSizes, nil); err != nil {
+			return catalogComboRecord{}, err
+		}
+	}
 	const query = `
 		INSERT INTO catalog_combos (
 			combo_key, store_category, name, description, size_item_id, price_cents, included_toppings,
@@ -249,6 +282,11 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 	}
 	if err := insertCatalogComboItems(ctx, tx, comboID, request.Items); err != nil {
 		return catalogComboRecord{}, err
+	}
+	if request.Category == string(domain.CatalogCategoryGourmet) {
+		if err := insertCatalogComboGourmetSizes(ctx, tx, comboID, request.GourmetSizes); err != nil {
+			return catalogComboRecord{}, err
+		}
 	}
 	combo, err := loadCatalogCombo(ctx, tx, comboID)
 	if err != nil {
@@ -286,6 +324,16 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 	}
 	if request.Items != nil {
 		items = *request.Items
+	}
+	gourmetSizes := make([]catalogComboGourmetSizeInput, 0, len(combo.GourmetSizes))
+	for _, size := range combo.GourmetSizes {
+		gourmetSizes = append(gourmetSizes, catalogComboGourmetSizeInput{
+			SizeItemID: size.SizeItemID,
+			PriceCents: size.PriceCents,
+		})
+	}
+	if request.GourmetSizes != nil {
+		gourmetSizes = *request.GourmetSizes
 	}
 	if err := validateCatalogReferences(ctx, tx, combo.SizeItemID, items, previousSizeItemID, previousItems); err != nil {
 		return catalogComboRecord{}, false, err
@@ -328,8 +376,16 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 		combo.SortOrder = *request.SortOrder
 	}
 	if combo.Category == string(domain.CatalogCategoryGourmet) &&
-		(strings.TrimSpace(combo.Description) == "" || len(items) < 2) {
+		(strings.TrimSpace(combo.Description) == "" || len(items) < 2 || len(gourmetSizes) == 0) {
 		return catalogComboRecord{}, false, application.ErrInvalidInput
+	}
+	if combo.Category != string(domain.CatalogCategoryGourmet) && len(gourmetSizes) > 0 {
+		gourmetSizes = nil
+	}
+	if request.GourmetSizes != nil && len(gourmetSizes) > 0 {
+		if err := validateCatalogGourmetSizeReferences(ctx, tx, gourmetSizes, combo.GourmetSizes); err != nil {
+			return catalogComboRecord{}, false, err
+		}
 	}
 
 	const updateQuery = `
@@ -364,6 +420,16 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 		}
 		if err := insertCatalogComboItems(ctx, tx, comboID, *request.Items); err != nil {
 			return catalogComboRecord{}, false, err
+		}
+	}
+	if request.GourmetSizes != nil || combo.Category != string(domain.CatalogCategoryGourmet) {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM catalog_combo_gourmet_sizes WHERE combo_id = $1::uuid`, comboID); err != nil {
+			return catalogComboRecord{}, false, fmt.Errorf("replace Gourmet size prices: %w", err)
+		}
+		if combo.Category == string(domain.CatalogCategoryGourmet) {
+			if err := insertCatalogComboGourmetSizes(ctx, tx, comboID, gourmetSizes); err != nil {
+				return catalogComboRecord{}, false, err
+			}
 		}
 	}
 	updated, err := loadCatalogCombo(ctx, tx, comboID)
@@ -468,7 +534,67 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	if err := rows.Err(); err != nil {
 		return catalogComboRecord{}, fmt.Errorf("iterate combo item links: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return catalogComboRecord{}, fmt.Errorf("close combo item links: %w", err)
+	}
+	combo.GourmetSizes, err = loadCatalogComboGourmetSizes(ctx, queryer, comboID)
+	if err != nil {
+		return catalogComboRecord{}, err
+	}
 	return combo, nil
+}
+
+func loadCatalogComboGourmetSizes(ctx context.Context, queryer catalogQueryer, comboID string) ([]catalogComboGourmetSizeRecord, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT item.id::text, item.name, sizes.price_cents,
+			item.available AND item.deleted_at IS NULL
+		FROM catalog_combo_gourmet_sizes AS sizes
+		JOIN catalog_items AS item ON item.id = sizes.size_item_id
+		WHERE sizes.combo_id = $1::uuid
+		ORDER BY sizes.sort_order, item.sort_order, item.name
+	`, comboID)
+	if err != nil {
+		return nil, fmt.Errorf("query Gourmet size prices: %w", err)
+	}
+	defer rows.Close()
+
+	sizes := make([]catalogComboGourmetSizeRecord, 0)
+	for rows.Next() {
+		var size catalogComboGourmetSizeRecord
+		if err := rows.Scan(&size.SizeItemID, &size.SizeName, &size.PriceCents, &size.Available); err != nil {
+			return nil, fmt.Errorf("scan Gourmet size price: %w", err)
+		}
+		sizes = append(sizes, size)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate Gourmet size prices: %w", err)
+	}
+	return sizes, nil
+}
+
+func validateCatalogGourmetSizeReferences(ctx context.Context, queryer catalogQueryer, sizes []catalogComboGourmetSizeInput, previous []catalogComboGourmetSizeRecord) error {
+	previousIDs := make(map[string]struct{}, len(previous))
+	for _, size := range previous {
+		previousIDs[size.SizeItemID] = struct{}{}
+	}
+	for _, size := range sizes {
+		if _, wasAlreadyLinked := previousIDs[size.SizeItemID]; wasAlreadyLinked {
+			continue
+		}
+		var isActiveSize bool
+		if err := queryer.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM catalog_items
+				WHERE id = $1::uuid AND kind = 'size' AND available AND deleted_at IS NULL
+			)
+		`, size.SizeItemID).Scan(&isActiveSize); err != nil {
+			return fmt.Errorf("validate Gourmet size: %w", err)
+		}
+		if !isActiveSize {
+			return application.ErrCatalogReference
+		}
+	}
+	return nil
 }
 
 func validateCatalogReferences(ctx context.Context, queryer catalogQueryer, sizeItemID string, items []catalogComboItemInput, previousSizeItemID string, previousItems []catalogComboItemRecord) error {
@@ -518,6 +644,18 @@ func insertCatalogComboItems(ctx context.Context, tx *sql.Tx, comboID string, it
 			VALUES ($1::uuid, $2::uuid, $3)
 		`, comboID, item.ItemID, item.Quantity); err != nil {
 			return fmt.Errorf("insert combo item link: %w", err)
+		}
+	}
+	return nil
+}
+
+func insertCatalogComboGourmetSizes(ctx context.Context, tx *sql.Tx, comboID string, sizes []catalogComboGourmetSizeInput) error {
+	for index, size := range sizes {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO catalog_combo_gourmet_sizes (combo_id, size_item_id, price_cents, sort_order)
+			VALUES ($1::uuid, $2::uuid, $3, $4)
+		`, comboID, size.SizeItemID, size.PriceCents, index); err != nil {
+			return fmt.Errorf("insert Gourmet size price: %w", err)
 		}
 	}
 	return nil

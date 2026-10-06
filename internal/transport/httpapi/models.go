@@ -19,6 +19,7 @@ type dashboardData = application.DashboardData
 type catalogItemRecord = application.CatalogItemRecord
 type catalogRuleRecord = application.CatalogRuleRecord
 type catalogComboItemRecord = application.CatalogComboItemRecord
+type catalogComboGourmetSizeRecord = application.CatalogComboGourmetSizeRecord
 type catalogComboRecord = application.CatalogComboRecord
 type catalogData = application.CatalogData
 type createCatalogItemRequest = application.CreateCatalogItemRequest

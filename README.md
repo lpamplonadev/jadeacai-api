@@ -114,6 +114,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. A migration [20261005160000_add_store_settings.sql](supabase/migrations/20261005160000_add_store_settings.sql) semeia horários, história e telefone padrão da loja. A migration [20261006120000_add_catalog_combo_category.sql](supabase/migrations/20261006120000_add_catalog_combo_category.sql) classifica os combos como `combo` ou `gourmet`; registros existentes recebem `combo`. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
 A migration [20261006140000_add_gourmet_description.sql](supabase/migrations/20261006140000_add_gourmet_description.sql) adiciona a descrição comercial dos Gourmets. Gourmet é uma receita fixa: exige descrição e itens definidos, e o cliente não personaliza seus ingredientes.
+A migration [20261006150000_add_gourmet_size_prices.sql](supabase/migrations/20261006150000_add_gourmet_size_prices.sql) permite configurar tamanhos e preços independentes por Gourmet e preserva o tamanho/preço atual como primeira opção.
 
 ### Rotas administrativas do catálogo
 
@@ -123,7 +124,7 @@ Todas exigem `Authorization: Bearer <ADMIN_API_KEY>`:
 - `POST /api/v1/admin/catalog/items`: cria flavor, size, topping, sauce, condiment position, fruit ou extra.
 - `PATCH /api/v1/admin/catalog/items/{itemId}`: altera nome, preço, ordem ou disponibilidade.
 - `DELETE /api/v1/admin/catalog/items/{itemId}`: arquiva o item sem apagar referências.
-- `POST /api/v1/admin/catalog/combos`: cria combo vinculando tamanhos e itens existentes; `category` aceita `combo` ou `gourmet` (padrão `combo`). Gourmets exigem `description` e receita fixa em `items`; combos aceitam várias porções de tamanho com `quantity` e soma total limitada a 100. `sizeItemId` identifica o primeiro tamanho para compatibilidade.
+- `POST /api/v1/admin/catalog/combos`: cria combo vinculando tamanhos e itens existentes; `category` aceita `combo` ou `gourmet` (padrão `combo`). Gourmets exigem `description`, receita fixa em `items` e ao menos uma opção em `gourmetSizes` (`sizeItemId`, `priceCents`); combos aceitam várias porções de tamanho com `quantity` e soma total limitada a 100. `sizeItemId` e `priceCents` identificam a primeira opção Gourmet para compatibilidade.
 - `PATCH /api/v1/admin/catalog/combos/{comboId}`: altera dados ou substitui tamanhos e demais itens vinculados.
 - `DELETE /api/v1/admin/catalog/combos/{comboId}`: arquiva o combo.
 

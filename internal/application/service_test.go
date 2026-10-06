@@ -27,6 +27,9 @@ func TestValidateCatalogGourmetRequiresDescriptionAndRecipe(t *testing.T) {
 			{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", Quantity: 1},
 			{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", Quantity: 1},
 		},
+		GourmetSizes: []CatalogComboGourmetSizeInput{{
+			SizeItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7203", PriceCents: 2500,
+		}},
 	}
 	if err := validateCatalogCombo(request); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected Gourmet without description to be rejected, got %v", err)
@@ -43,6 +46,23 @@ func TestValidateCatalogGourmetRequiresDescriptionAndRecipe(t *testing.T) {
 	})
 	if err := validateCatalogCombo(request); err != nil {
 		t.Fatalf("expected complete Gourmet product to be accepted, got %v", err)
+	}
+}
+
+func TestValidateCatalogGourmetSizes(t *testing.T) {
+	valid := []CatalogComboGourmetSizeInput{
+		{SizeItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", PriceCents: 2500},
+		{SizeItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", PriceCents: 3500},
+	}
+	if err := validateCatalogGourmetSizes(valid); err != nil {
+		t.Fatalf("expected valid Gourmet sizes, got %v", err)
+	}
+	duplicate := append(valid, valid[0])
+	if err := validateCatalogGourmetSizes(duplicate); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected duplicate Gourmet sizes to be rejected, got %v", err)
+	}
+	if err := validateCatalogGourmetSizes([]CatalogComboGourmetSizeInput{valid[0], {SizeItemID: valid[1].SizeItemID, PriceCents: -1}}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected negative Gourmet prices to be rejected, got %v", err)
 	}
 }
 

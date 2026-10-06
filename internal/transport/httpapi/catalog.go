@@ -169,7 +169,7 @@ func archiveCatalogCombo(store *application.Service) gin.HandlerFunc {
 
 func hasCatalogComboUpdate(request updateCatalogComboRequest) bool {
 	return request.Name != nil || request.SizeItemID != nil || request.PriceCents != nil ||
-		request.Description != nil || request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
+		request.Description != nil || request.GourmetSizes != nil || request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
 		request.Tag != nil || request.ImageURL != nil || request.ImageAlt != nil ||
 		request.Available != nil || request.SortOrder != nil || request.Items != nil
 }

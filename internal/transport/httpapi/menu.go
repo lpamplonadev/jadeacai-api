@@ -19,21 +19,28 @@ type publicMenuItem struct {
 }
 
 type publicMenuCombo struct {
-	ID               string                `json:"id"`
-	Key              string                `json:"key"`
-	Category         string                `json:"category"`
-	Name             string                `json:"name"`
-	Description      string                `json:"description"`
-	SizeID           string                `json:"sizeId"`
-	Size             string                `json:"size"`
-	PriceCents       int                   `json:"priceCents"`
-	IncludedToppings int                   `json:"includedToppings"`
-	IncludedFruits   int                   `json:"includedFruits"`
-	IncludedExtras   int                   `json:"includedExtras"`
-	Tag              string                `json:"tag"`
-	ImageURL         string                `json:"image"`
-	ImageAlt         string                `json:"imageAlt"`
-	Items            []publicMenuComboItem `json:"items"`
+	ID               string                  `json:"id"`
+	Key              string                  `json:"key"`
+	Category         string                  `json:"category"`
+	Name             string                  `json:"name"`
+	Description      string                  `json:"description"`
+	SizeID           string                  `json:"sizeId"`
+	Size             string                  `json:"size"`
+	PriceCents       int                     `json:"priceCents"`
+	IncludedToppings int                     `json:"includedToppings"`
+	IncludedFruits   int                     `json:"includedFruits"`
+	IncludedExtras   int                     `json:"includedExtras"`
+	Tag              string                  `json:"tag"`
+	ImageURL         string                  `json:"image"`
+	ImageAlt         string                  `json:"imageAlt"`
+	Items            []publicMenuComboItem   `json:"items"`
+	GourmetSizes     []publicMenuGourmetSize `json:"gourmetSizes,omitempty"`
+}
+
+type publicMenuGourmetSize struct {
+	SizeID     string `json:"sizeId"`
+	Size       string `json:"size"`
+	PriceCents int    `json:"priceCents"`
 }
 
 type publicMenuComboItem struct {
@@ -102,7 +109,23 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			continue
 		}
 		size, exists := activeItems[combo.SizeItemID]
-		if !exists || size.Kind != string(domain.CatalogSize) {
+		gourmetSizes := make([]publicMenuGourmetSize, 0, len(combo.GourmetSizes))
+		if combo.Category == string(domain.CatalogCategoryGourmet) {
+			for _, gourmetSize := range combo.GourmetSizes {
+				activeSize, isAvailable := activeItems[gourmetSize.SizeItemID]
+				if !gourmetSize.Available || !isAvailable || activeSize.Kind != string(domain.CatalogSize) {
+					continue
+				}
+				gourmetSizes = append(gourmetSizes, publicMenuGourmetSize{
+					SizeID: gourmetSize.SizeItemID, Size: activeSize.Name, PriceCents: gourmetSize.PriceCents,
+				})
+			}
+			if len(gourmetSizes) == 0 {
+				continue
+			}
+			size = activeItems[gourmetSizes[0].SizeID]
+			exists = true
+		} else if !exists || size.Kind != string(domain.CatalogSize) {
 			continue
 		}
 		comboItems := make([]publicMenuComboItem, 0, len(combo.Items))
@@ -123,6 +146,10 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 		if !allComboItemsAvailable {
 			continue
 		}
+		priceCents := combo.PriceCents
+		if len(gourmetSizes) > 0 {
+			priceCents = gourmetSizes[0].PriceCents
+		}
 		result.Combos = append(result.Combos, publicMenuCombo{
 			ID:               combo.ID,
 			Key:              combo.ComboKey,
@@ -131,7 +158,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			Description:      combo.Description,
 			SizeID:           size.ID,
 			Size:             size.Name,
-			PriceCents:       combo.PriceCents,
+			PriceCents:       priceCents,
 			IncludedToppings: combo.IncludedToppings,
 			IncludedFruits:   combo.IncludedFruits,
 			IncludedExtras:   combo.IncludedExtras,
@@ -139,6 +166,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			ImageURL:         combo.ImageURL,
 			ImageAlt:         combo.ImageAlt,
 			Items:            comboItems,
+			GourmetSizes:     gourmetSizes,
 		})
 	}
 	for _, rule := range catalog.Rules {

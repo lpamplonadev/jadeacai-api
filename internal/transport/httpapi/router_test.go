@@ -603,6 +603,9 @@ func TestPublicMenuCatalogIncludesComboCategory(t *testing.T) {
 			ID: "gourmet-combo-id", ComboKey: "combo-gourmet", Category: "gourmet",
 			Name: "Banoffe", Description: "Açaí cremoso com banana e doce de leite.",
 			SizeItemID: "size-id", SizeName: "500 ml", Available: true,
+			GourmetSizes: []catalogComboGourmetSizeRecord{{
+				SizeItemID: "size-id", SizeName: "500 ml", PriceCents: 2500, Available: true,
+			}},
 		}},
 	}}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/catalog", nil)
@@ -617,8 +620,9 @@ func TestPublicMenuCatalogIncludesComboCategory(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(body.Combos) != 1 || body.Combos[0].Category != "gourmet" || body.Combos[0].Description == "" {
-		t.Fatalf("expected Gourmet category and description in public catalog, got %+v", body.Combos)
+	if len(body.Combos) != 1 || body.Combos[0].Category != "gourmet" || body.Combos[0].Description == "" ||
+		len(body.Combos[0].GourmetSizes) != 1 || body.Combos[0].GourmetSizes[0].PriceCents != 2500 {
+		t.Fatalf("expected Gourmet description and sizes in public catalog, got %+v", body.Combos)
 	}
 }
 
