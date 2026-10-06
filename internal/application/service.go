@@ -181,6 +181,7 @@ func (service *Service) ArchiveCatalogItem(ctx context.Context, itemID string) (
 
 func (service *Service) CreateCombo(ctx context.Context, request CreateCatalogComboRequest) (CatalogComboRecord, error) {
 	request.Name = strings.TrimSpace(request.Name)
+	request.Description = strings.TrimSpace(request.Description)
 	if request.Category == "" {
 		request.Category = string(domain.CatalogCategoryCombo)
 	}
@@ -202,6 +203,13 @@ func (service *Service) UpdateCombo(ctx context.Context, comboID string, request
 			return CatalogComboRecord{}, false, ErrInvalidInput
 		}
 		request.Name = &name
+	}
+	if request.Description != nil {
+		description := strings.TrimSpace(*request.Description)
+		if len(description) > 1200 {
+			return CatalogComboRecord{}, false, ErrInvalidInput
+		}
+		request.Description = &description
 	}
 	if request.Category != nil && !domain.IsCatalogCategory(*request.Category) {
 		return CatalogComboRecord{}, false, ErrInvalidInput
@@ -230,7 +238,11 @@ func (service *Service) ArchiveCatalogCombo(ctx context.Context, comboID string)
 func validateCatalogCombo(request CreateCatalogComboRequest) error {
 	if request.Name == "" || len(request.Name) > 120 || !domain.IsCatalogCategory(request.Category) || !domain.IsValidUUID(request.SizeItemID) ||
 		request.PriceCents < 0 || request.IncludedToppings < 0 || request.IncludedFruits < 0 ||
-		request.IncludedExtras < 0 || request.SortOrder < 0 {
+		request.IncludedExtras < 0 || request.SortOrder < 0 || len(request.Description) > 1200 {
+		return ErrInvalidInput
+	}
+	if request.Category == string(domain.CatalogCategoryGourmet) &&
+		(strings.TrimSpace(request.Description) == "" || len(request.Items) < 2) {
 		return ErrInvalidInput
 	}
 	return validateComboItems(request.Items)
@@ -257,7 +269,7 @@ func validateComboItems(items []CatalogComboItemInput) error {
 
 func hasCatalogComboUpdate(request UpdateCatalogComboRequest) bool {
 	return request.Name != nil || request.SizeItemID != nil || request.PriceCents != nil ||
-		request.Category != nil ||
+		request.Category != nil || request.Description != nil ||
 		request.IncludedToppings != nil || request.IncludedFruits != nil || request.IncludedExtras != nil ||
 		request.Tag != nil || request.ImageURL != nil || request.ImageAlt != nil ||
 		request.Available != nil || request.SortOrder != nil || request.Items != nil

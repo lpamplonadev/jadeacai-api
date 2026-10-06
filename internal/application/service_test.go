@@ -18,6 +18,34 @@ func TestValidateComboItemsRejectsMoreThan100Units(t *testing.T) {
 	}
 }
 
+func TestValidateCatalogGourmetRequiresDescriptionAndRecipe(t *testing.T) {
+	request := CreateCatalogComboRequest{
+		Name:       "Banoffe",
+		Category:   "gourmet",
+		SizeItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201",
+		Items: []CatalogComboItemInput{
+			{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7201", Quantity: 1},
+			{ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", Quantity: 1},
+		},
+	}
+	if err := validateCatalogCombo(request); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected Gourmet without description to be rejected, got %v", err)
+	}
+
+	request.Description = "Açaí cremoso com banana e doce de leite."
+	request.Items = request.Items[:1]
+	if err := validateCatalogCombo(request); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected Gourmet without a fixed recipe to be rejected, got %v", err)
+	}
+
+	request.Items = append(request.Items, CatalogComboItemInput{
+		ItemID: "a4f535aa-8c2b-4f0f-9c31-783061cc7202", Quantity: 1,
+	})
+	if err := validateCatalogCombo(request); err != nil {
+		t.Fatalf("expected complete Gourmet product to be accepted, got %v", err)
+	}
+}
+
 func TestDashboardRejectsInvalidDateBeforeRepositoryCall(t *testing.T) {
 	service := NewService(nil)
 	if _, err := service.Dashboard(context.Background(), "2026-02-30"); !errors.Is(err, ErrInvalidInput) {

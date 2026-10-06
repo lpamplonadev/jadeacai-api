@@ -52,7 +52,7 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	items.Close()
 
 	combos, err := store.db.QueryContext(ctx, `
-		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.size_item_id::text, size.name,
+		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.description, c.size_item_id::text, size.name,
 			c.price_cents, c.included_toppings, c.included_fruits, c.included_extras,
 			c.tag, c.image_url, c.image_alt, c.available, c.sort_order, c.deleted_at
 		FROM catalog_combos AS c
@@ -71,6 +71,7 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 			&combo.ComboKey,
 			&combo.Category,
 			&combo.Name,
+			&combo.Description,
 			&combo.SizeItemID,
 			&combo.SizeName,
 			&combo.PriceCents,
@@ -220,10 +221,10 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 	}
 	const query = `
 		INSERT INTO catalog_combos (
-			combo_key, store_category, name, size_item_id, price_cents, included_toppings,
+			combo_key, store_category, name, description, size_item_id, price_cents, included_toppings,
 			included_fruits, included_extras, tag, image_url, image_alt, available, sort_order
 		)
-		VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id::text
 	`
 	var comboID string
@@ -231,6 +232,7 @@ func (store *Store) CreateCatalogCombo(ctx context.Context, request createCatalo
 		comboKey,
 		request.Category,
 		strings.TrimSpace(request.Name),
+		strings.TrimSpace(request.Description),
 		request.SizeItemID,
 		request.PriceCents,
 		request.IncludedToppings,
@@ -295,6 +297,9 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 	if request.Category != nil {
 		combo.Category = *request.Category
 	}
+	if request.Description != nil {
+		combo.Description = strings.TrimSpace(*request.Description)
+	}
 	if request.PriceCents != nil {
 		combo.PriceCents = *request.PriceCents
 	}
@@ -322,13 +327,17 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 	if request.SortOrder != nil {
 		combo.SortOrder = *request.SortOrder
 	}
+	if combo.Category == string(domain.CatalogCategoryGourmet) &&
+		(strings.TrimSpace(combo.Description) == "" || len(items) < 2) {
+		return catalogComboRecord{}, false, application.ErrInvalidInput
+	}
 
 	const updateQuery = `
 		UPDATE catalog_combos
 		SET name = $1, size_item_id = $2::uuid, price_cents = $3,
 			included_toppings = $4, included_fruits = $5, included_extras = $6,
 			tag = $7, image_url = $8, image_alt = $9, available = $10,
-			sort_order = $11, store_category = $12, updated_at = now()
+			sort_order = $11, store_category = $12, updated_at = now(), description = $14
 		WHERE id = $13::uuid AND deleted_at IS NULL
 	`
 	if _, err := tx.ExecContext(ctx, updateQuery,
@@ -345,6 +354,7 @@ func (store *Store) UpdateCatalogCombo(ctx context.Context, comboID string, requ
 		combo.SortOrder,
 		combo.Category,
 		comboID,
+		combo.Description,
 	); err != nil {
 		return catalogComboRecord{}, false, fmt.Errorf("update catalog combo: %w", err)
 	}
@@ -406,7 +416,7 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 	var combo catalogComboRecord
 	var deletedAt sql.NullTime
 	err := queryer.QueryRowContext(ctx, `
-		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.size_item_id::text, size.name,
+		SELECT c.id::text, c.combo_key, c.store_category, c.name, c.description, c.size_item_id::text, size.name,
 			c.price_cents, c.included_toppings, c.included_fruits, c.included_extras,
 			c.tag, c.image_url, c.image_alt, c.available, c.sort_order, c.deleted_at
 		FROM catalog_combos AS c
@@ -417,6 +427,7 @@ func loadCatalogCombo(ctx context.Context, queryer catalogQueryer, comboID strin
 		&combo.ComboKey,
 		&combo.Category,
 		&combo.Name,
+		&combo.Description,
 		&combo.SizeItemID,
 		&combo.SizeName,
 		&combo.PriceCents,

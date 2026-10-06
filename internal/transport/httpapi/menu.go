@@ -23,6 +23,7 @@ type publicMenuCombo struct {
 	Key              string                `json:"key"`
 	Category         string                `json:"category"`
 	Name             string                `json:"name"`
+	Description      string                `json:"description"`
 	SizeID           string                `json:"sizeId"`
 	Size             string                `json:"size"`
 	PriceCents       int                   `json:"priceCents"`
@@ -127,6 +128,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			Key:              combo.ComboKey,
 			Category:         combo.Category,
 			Name:             combo.Name,
+			Description:      combo.Description,
 			SizeID:           size.ID,
 			Size:             size.Name,
 			PriceCents:       combo.PriceCents,
