@@ -20,6 +20,17 @@ func TestIsCatalogItemKind(t *testing.T) {
 	}
 }
 
+func TestIsCatalogCategory(t *testing.T) {
+	for _, category := range []string{"combo", "gourmet"} {
+		if !IsCatalogCategory(category) {
+			t.Errorf("expected %q to be a valid catalog category", category)
+		}
+	}
+	if IsCatalogCategory("unknown") {
+		t.Fatal("expected unknown catalog category to be rejected")
+	}
+}
+
 func TestIsValidUUID(t *testing.T) {
 	if !IsValidUUID("a4f535aa-8c2b-4f0f-9c31-783061cc7201") {
 		t.Fatal("expected valid UUID to be accepted")

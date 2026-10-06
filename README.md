@@ -1,6 +1,6 @@
-# Backend Jade Açaí
+# Backend Jade's Açaí
 
-API backend do projeto Jade Açaí, desenvolvido em Go com Gin.
+API backend do projeto Jade's Açaí, desenvolvido em Go com Gin.
 
 Consulte [ARCHITECTURE.md](ARCHITECTURE.md) para conhecer as camadas e as regras de dependência do backend.
 
@@ -112,7 +112,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 ## Modelo do catálogo
 
-A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. A migration [20261005160000_add_store_settings.sql](supabase/migrations/20261005160000_add_store_settings.sql) semeia horários, história e telefone padrão da loja. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
+A migration [20260929170000_create_catalog.sql](supabase/migrations/20260929170000_create_catalog.sql) cria `catalog_items`, `catalog_combos`, `catalog_combo_items` e `catalog_rules`, semeando os itens e combos atuais. A migration [20261003120000_create_catalog_images_bucket.sql](supabase/migrations/20261003120000_create_catalog_images_bucket.sql) configura o bucket público `catalog-images` no Supabase Storage, com limite de 5 MB e tipos JPEG, PNG e WebP. A migration [20261005160000_add_store_settings.sql](supabase/migrations/20261005160000_add_store_settings.sql) semeia horários, história e telefone padrão da loja. A migration [20261006120000_add_catalog_combo_category.sql](supabase/migrations/20261006120000_add_catalog_combo_category.sql) classifica os combos como `combo` ou `gourmet`; registros existentes recebem `combo`. `available = false` pausa um registro sem removê-lo da loja; `deleted_at` permite arquivá-lo sem quebrar combos ou o histórico dos pedidos. Combos referenciam tamanhos e itens por chaves estrangeiras. O Admin usa as rotas protegidas abaixo e o menu público lê os mesmos dados ativos por `/api/v1/menu/catalog`.
 
 ### Rotas administrativas do catálogo
 
@@ -122,7 +122,7 @@ Todas exigem `Authorization: Bearer <ADMIN_API_KEY>`:
 - `POST /api/v1/admin/catalog/items`: cria flavor, size, topping, sauce, condiment position, fruit ou extra.
 - `PATCH /api/v1/admin/catalog/items/{itemId}`: altera nome, preço, ordem ou disponibilidade.
 - `DELETE /api/v1/admin/catalog/items/{itemId}`: arquiva o item sem apagar referências.
-- `POST /api/v1/admin/catalog/combos`: cria combo vinculando tamanhos e itens existentes; `items` aceita várias porções de tamanho com `quantity` (por exemplo, duas de 770 ml e uma de 500 ml), com soma total de quantidades limitada a 100. `sizeItemId` identifica o primeiro tamanho para compatibilidade.
+- `POST /api/v1/admin/catalog/combos`: cria combo vinculando tamanhos e itens existentes; `category` aceita `combo` ou `gourmet` (padrão `combo`), e `items` aceita várias porções de tamanho com `quantity` (por exemplo, duas de 770 ml e uma de 500 ml), com soma total de quantidades limitada a 100. `sizeItemId` identifica o primeiro tamanho para compatibilidade.
 - `PATCH /api/v1/admin/catalog/combos/{comboId}`: altera dados ou substitui tamanhos e demais itens vinculados.
 - `DELETE /api/v1/admin/catalog/combos/{comboId}`: arquiva o combo.
 

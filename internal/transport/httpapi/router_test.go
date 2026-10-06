@@ -593,6 +593,34 @@ func TestPublicMenuCatalogExcludesUnavailableRecords(t *testing.T) {
 	}
 }
 
+func TestPublicMenuCatalogIncludesComboCategory(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{catalog: catalogData{
+		Items: []catalogItemRecord{{
+			ID: "size-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Available: true,
+		}},
+		Combos: []catalogComboRecord{{
+			ID: "gourmet-combo-id", ComboKey: "combo-gourmet", Category: "gourmet",
+			Name: "Combo Gourmet", SizeItemID: "size-id", SizeName: "500 ml", Available: true,
+		}},
+	}}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/menu/catalog", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	var body publicMenuCatalog
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Combos) != 1 || body.Combos[0].Category != "gourmet" {
+		t.Fatalf("expected Gourmet category in public catalog, got %+v", body.Combos)
+	}
+}
+
 func ptr(value string) *string {
 	return &value
 }

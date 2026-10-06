@@ -21,6 +21,7 @@ type publicMenuItem struct {
 type publicMenuCombo struct {
 	ID               string                `json:"id"`
 	Key              string                `json:"key"`
+	Category         string                `json:"category"`
 	Name             string                `json:"name"`
 	SizeID           string                `json:"sizeId"`
 	Size             string                `json:"size"`
@@ -124,6 +125,7 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 		result.Combos = append(result.Combos, publicMenuCombo{
 			ID:               combo.ID,
 			Key:              combo.ComboKey,
+			Category:         combo.Category,
 			Name:             combo.Name,
 			SizeID:           size.ID,
 			Size:             size.Name,

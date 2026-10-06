@@ -1,5 +1,21 @@
 package domain
 
+type CatalogCategory string
+
+const (
+	CatalogCategoryCombo   CatalogCategory = "combo"
+	CatalogCategoryGourmet CatalogCategory = "gourmet"
+)
+
+func IsCatalogCategory(category string) bool {
+	switch CatalogCategory(category) {
+	case CatalogCategoryCombo, CatalogCategoryGourmet:
+		return true
+	default:
+		return false
+	}
+}
+
 type CatalogItemKind string
 
 const (

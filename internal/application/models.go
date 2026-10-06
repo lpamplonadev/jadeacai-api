@@ -140,6 +140,7 @@ type CatalogComboItemRecord struct {
 type CatalogComboRecord struct {
 	ID               string                   `json:"id"`
 	ComboKey         string                   `json:"comboKey"`
+	Category         string                   `json:"category"`
 	Name             string                   `json:"name"`
 	SizeItemID       string                   `json:"sizeItemId"`
 	SizeName         string                   `json:"sizeName"`
@@ -184,6 +185,7 @@ type CatalogComboItemInput struct {
 
 type CreateCatalogComboRequest struct {
 	Name             string                  `json:"name"`
+	Category         string                  `json:"category"`
 	SizeItemID       string                  `json:"sizeItemId"`
 	PriceCents       int                     `json:"priceCents"`
 	IncludedToppings int                     `json:"includedToppings"`
@@ -199,6 +201,7 @@ type CreateCatalogComboRequest struct {
 
 type UpdateCatalogComboRequest struct {
 	Name             *string                  `json:"name"`
+	Category         *string                  `json:"category"`
 	SizeItemID       *string                  `json:"sizeItemId"`
 	PriceCents       *int                     `json:"priceCents"`
 	IncludedToppings *int                     `json:"includedToppings"`
