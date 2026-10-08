@@ -151,7 +151,12 @@ func (service *Service) Catalog(ctx context.Context) (CatalogData, error) {
 
 func (service *Service) CreateItem(ctx context.Context, request CreateCatalogItemRequest) (CatalogItemRecord, error) {
 	request.Name = strings.TrimSpace(request.Name)
-	if request.Name == "" || len(request.Name) > 120 || !domain.IsCatalogItemKind(request.Kind) || request.PriceCents < 0 || request.SortOrder < 0 {
+	request.Description = strings.TrimSpace(request.Description)
+	request.ImageURL = strings.TrimSpace(request.ImageURL)
+	request.ImageAlt = strings.TrimSpace(request.ImageAlt)
+	if request.Name == "" || len(request.Name) > 120 || len(request.Description) > 1200 ||
+		len(request.ImageURL) > 2048 || len(request.ImageAlt) > 180 ||
+		!domain.IsCatalogItemKind(request.Kind) || request.PriceCents < 0 || request.SortOrder < 0 {
 		return CatalogItemRecord{}, ErrInvalidInput
 	}
 	itemKey, err := newCatalogKey(request.Kind)
@@ -170,9 +175,31 @@ func (service *Service) UpdateItem(ctx context.Context, itemID string, request U
 		}
 		request.Name = &name
 	}
+	if request.Description != nil {
+		description := strings.TrimSpace(*request.Description)
+		if len(description) > 1200 {
+			return CatalogItemRecord{}, false, ErrInvalidInput
+		}
+		request.Description = &description
+	}
+	if request.ImageURL != nil {
+		imageURL := strings.TrimSpace(*request.ImageURL)
+		if len(imageURL) > 2048 {
+			return CatalogItemRecord{}, false, ErrInvalidInput
+		}
+		request.ImageURL = &imageURL
+	}
+	if request.ImageAlt != nil {
+		imageAlt := strings.TrimSpace(*request.ImageAlt)
+		if len(imageAlt) > 180 {
+			return CatalogItemRecord{}, false, ErrInvalidInput
+		}
+		request.ImageAlt = &imageAlt
+	}
 	if (request.PriceCents != nil && *request.PriceCents < 0) ||
 		(request.SortOrder != nil && *request.SortOrder < 0) ||
-		(request.Name == nil && request.PriceCents == nil && request.Available == nil && request.SortOrder == nil) {
+		(request.Name == nil && request.Description == nil && request.ImageURL == nil && request.ImageAlt == nil &&
+			request.PriceCents == nil && request.Available == nil && request.SortOrder == nil) {
 		return CatalogItemRecord{}, false, ErrInvalidInput
 	}
 	return service.repository.UpdateCatalogItem(ctx, itemID, request)

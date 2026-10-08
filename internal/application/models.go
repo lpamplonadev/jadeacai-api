@@ -118,6 +118,9 @@ type CatalogItemRecord struct {
 	ItemKey    string  `json:"itemKey"`
 	Kind       string  `json:"kind"`
 	Name       string  `json:"name"`
+	Description string `json:"description"`
+	ImageURL   string  `json:"imageUrl"`
+	ImageAlt   string  `json:"imageAlt"`
 	PriceCents int     `json:"priceCents"`
 	Available  bool    `json:"available"`
 	SortOrder  int     `json:"sortOrder"`
@@ -218,6 +221,9 @@ type CatalogData struct {
 type CreateCatalogItemRequest struct {
 	Kind       string `json:"kind"`
 	Name       string `json:"name"`
+	Description string `json:"description"`
+	ImageURL   string `json:"imageUrl"`
+	ImageAlt   string `json:"imageAlt"`
 	PriceCents int    `json:"priceCents"`
 	Available  *bool  `json:"available"`
 	SortOrder  int    `json:"sortOrder"`
@@ -225,6 +231,9 @@ type CreateCatalogItemRequest struct {
 
 type UpdateCatalogItemRequest struct {
 	Name       *string `json:"name"`
+	Description *string `json:"description"`
+	ImageURL   *string `json:"imageUrl"`
+	ImageAlt   *string `json:"imageAlt"`
 	PriceCents *int    `json:"priceCents"`
 	Available  *bool   `json:"available"`
 	SortOrder  *int    `json:"sortOrder"`

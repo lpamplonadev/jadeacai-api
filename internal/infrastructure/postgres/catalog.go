@@ -31,7 +31,8 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 	}
 
 	items, err := store.db.QueryContext(ctx, `
-		SELECT id::text, item_key, kind, name, price_cents, available, sort_order, deleted_at
+		SELECT id::text, item_key, kind, name, description, image_url, image_alt,
+			price_cents, available, sort_order, deleted_at
 		FROM catalog_items
 		ORDER BY kind, sort_order, name
 	`)
@@ -183,11 +184,14 @@ func (store *Store) Catalog(ctx context.Context) (catalogData, error) {
 
 func (store *Store) CreateCatalogItem(ctx context.Context, request createCatalogItemRequest, itemKey string, available bool) (catalogItemRecord, error) {
 	const query = `
-		INSERT INTO catalog_items (item_key, kind, name, price_cents, available, sort_order)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id::text, item_key, kind, name, price_cents, available, sort_order, deleted_at
+		INSERT INTO catalog_items (item_key, kind, name, description, image_url, image_alt, price_cents, available, sort_order)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id::text, item_key, kind, name, description, image_url, image_alt, price_cents, available, sort_order, deleted_at
 	`
-	item, err := scanCatalogItem(store.db.QueryRowContext(ctx, query, itemKey, request.Kind, request.Name, request.PriceCents, available, request.SortOrder))
+	item, err := scanCatalogItem(store.db.QueryRowContext(ctx, query,
+		itemKey, request.Kind, request.Name, request.Description, request.ImageURL, request.ImageAlt,
+		request.PriceCents, available, request.SortOrder,
+	))
 	if err != nil {
 		return catalogItemRecord{}, fmt.Errorf("insert catalog item: %w", err)
 	}
@@ -198,15 +202,21 @@ func (store *Store) UpdateCatalogItem(ctx context.Context, itemID string, reques
 	const query = `
 		UPDATE catalog_items
 		SET name = COALESCE($1, name),
-			price_cents = COALESCE($2, price_cents),
-			available = COALESCE($3, available),
-			sort_order = COALESCE($4, sort_order),
+			description = COALESCE($2, description),
+			image_url = COALESCE($3, image_url),
+			image_alt = COALESCE($4, image_alt),
+			price_cents = COALESCE($5, price_cents),
+			available = COALESCE($6, available),
+			sort_order = COALESCE($7, sort_order),
 			updated_at = now()
-		WHERE id = $5::uuid AND deleted_at IS NULL
-		RETURNING id::text, item_key, kind, name, price_cents, available, sort_order, deleted_at
+		WHERE id = $8::uuid AND deleted_at IS NULL
+		RETURNING id::text, item_key, kind, name, description, image_url, image_alt, price_cents, available, sort_order, deleted_at
 	`
 	item, err := scanCatalogItem(store.db.QueryRowContext(ctx, query,
 		catalogPointerValue(request.Name),
+		catalogPointerValue(request.Description),
+		catalogPointerValue(request.ImageURL),
+		catalogPointerValue(request.ImageAlt),
 		catalogPointerValue(request.PriceCents),
 		catalogPointerValue(request.Available),
 		catalogPointerValue(request.SortOrder),
@@ -415,6 +425,9 @@ func scanCatalogItem(scanner catalogRowScanner) (catalogItemRecord, error) {
 		&item.ItemKey,
 		&item.Kind,
 		&item.Name,
+		&item.Description,
+		&item.ImageURL,
+		&item.ImageAlt,
 		&item.PriceCents,
 		&item.Available,
 		&item.SortOrder,

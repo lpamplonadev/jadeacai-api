@@ -1,0 +1,4 @@
+ALTER TABLE catalog_items
+    ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS image_url text NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS image_alt text NOT NULL DEFAULT '';

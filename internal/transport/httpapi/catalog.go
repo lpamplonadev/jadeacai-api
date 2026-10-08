@@ -49,7 +49,9 @@ func updateCatalogItem(store *application.Service) gin.HandlerFunc {
 		}
 
 		var request updateCatalogItemRequest
-		if err := context.ShouldBindJSON(&request); err != nil || (request.Name == nil && request.PriceCents == nil && request.Available == nil && request.SortOrder == nil) {
+		if err := context.ShouldBindJSON(&request); err != nil ||
+			(request.Name == nil && request.Description == nil && request.ImageURL == nil && request.ImageAlt == nil &&
+				request.PriceCents == nil && request.Available == nil && request.SortOrder == nil) {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "no valid catalog item fields"})
 			return
 		}

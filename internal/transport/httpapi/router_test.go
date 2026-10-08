@@ -578,7 +578,7 @@ func TestPublicMenuCatalogExcludesUnavailableRecords(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &testOrderStore{catalog: catalogData{
 		Items: []catalogItemRecord{
-			{ID: "size-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Available: true},
+			{ID: "size-id", ItemKey: "size-500", Kind: "size", Name: "500 ml", Description: "Tamanho com receita da casa.", ImageURL: "https://cdn.example/size.webp", ImageAlt: "Açaí de 500 ml", Available: true},
 			{ID: "active-item-id", ItemKey: "topping-pacoca", Kind: "topping", Name: "Paçoca", Available: true},
 			{ID: "paused-item-id", ItemKey: "topping-paused", Kind: "topping", Name: "Pausado", Available: false},
 			{ID: "archived-item-id", ItemKey: "topping-archived", Kind: "topping", Name: "Arquivado", Available: false, DeletedAt: ptr("2026-09-29T12:00:00Z")},
@@ -603,6 +603,10 @@ func TestPublicMenuCatalogExcludesUnavailableRecords(t *testing.T) {
 	}
 	if len(body.Items) != 2 || len(body.Combos) != 1 || body.Combos[0].Key != "combo-active" {
 		t.Fatalf("public catalog included unavailable records: %+v", body)
+	}
+	if body.Items[0].Description != "Tamanho com receita da casa." ||
+		body.Items[0].ImageURL != "https://cdn.example/size.webp" || body.Items[0].ImageAlt != "Açaí de 500 ml" {
+		t.Fatalf("public catalog lost size presentation fields: %+v", body.Items[0])
 	}
 	if body.Rules["delivery_fee_cents"] != float64(300) {
 		t.Fatalf("unexpected public rules: %+v", body.Rules)

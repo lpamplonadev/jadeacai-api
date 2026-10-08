@@ -14,6 +14,9 @@ type publicMenuItem struct {
 	Key        string `json:"key"`
 	Kind       string `json:"kind"`
 	Name       string `json:"name"`
+	Description string `json:"description"`
+	ImageURL   string `json:"image"`
+	ImageAlt   string `json:"imageAlt"`
 	PriceCents int    `json:"priceCents"`
 	SortOrder  int    `json:"sortOrder"`
 }
@@ -108,6 +111,9 @@ func buildPublicMenuCatalog(catalog catalogData) publicMenuCatalog {
 			Key:        item.ItemKey,
 			Kind:       item.Kind,
 			Name:       item.Name,
+			Description: item.Description,
+			ImageURL:   item.ImageURL,
+			ImageAlt:   item.ImageAlt,
 			PriceCents: item.PriceCents,
 			SortOrder:  item.SortOrder,
 		}
