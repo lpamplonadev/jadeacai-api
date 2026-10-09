@@ -94,6 +94,12 @@ func (store *testOrderStore) StoreSettings(_ context.Context) (domain.StoreSetti
 	}
 	if store.settings.WeeklyHours == nil {
 		store.settings = domain.DefaultStoreSettings()
+		store.settings.DeliveryZones = append(store.settings.DeliveryZones, domain.DeliveryZone{
+			Name:          "Centro",
+			Neighborhoods: []string{"Centro"},
+			FeeCents:      500,
+			Enabled:       true,
+		})
 		open := true
 		store.settings.ManualOverride = &open
 	}
@@ -726,19 +732,22 @@ func TestCreateOrderEndpoint(t *testing.T) {
 	}
 
 	var body struct {
-		Status      string `json:"status"`
-		Persisted   bool   `json:"persisted"`
-		OrderID     string `json:"orderId"`
-		OrderNumber int    `json:"orderNumber"`
-		OrderDate   string `json:"orderDate"`
+		Status              string `json:"status"`
+		Persisted           bool   `json:"persisted"`
+		OrderID             string `json:"orderId"`
+		OrderNumber         int    `json:"orderNumber"`
+		OrderDate           string `json:"orderDate"`
+		DeliveryZoneName    string `json:"deliveryZoneName"`
+		DeliveryFeeCents    int    `json:"deliveryFeeCents"`
+		EstimatedTotalCents int    `json:"estimatedTotalCents"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Status != "received" || !body.Persisted || body.OrderID != store.created.ID || body.OrderNumber != 7 || body.OrderDate != "2026-09-29" {
+	if body.Status != "received" || !body.Persisted || body.OrderID != store.created.ID || body.OrderNumber != 7 || body.OrderDate != "2026-09-29" || body.DeliveryZoneName != "Centro" || body.DeliveryFeeCents != 500 || body.EstimatedTotalCents != 1990 {
 		t.Fatalf("unexpected response: %+v", body)
 	}
-	if !store.called || store.order.EstimatedTotalCents != 1990 {
+	if !store.called || store.order.EstimatedTotalCents != 1990 || store.order.Delivery.DeliveryFeeCents != 500 {
 		t.Fatalf("expected order to be persisted, got %+v", store)
 	}
 }
@@ -756,8 +765,23 @@ func TestCreateOrderAcceptsMultipleCartItems(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusAccepted, response.Code, response.Body.String())
 	}
-	if !store.called || len(store.order.Items) != 2 || store.order.Items[1].Name != "Gourmet Banoffe · 330 ml" || store.order.Items[1].Description != "Açaí de banana · banana · doce de leite" {
+	if !store.called || len(store.order.Items) != 2 || store.order.Items[1].Name != "Gourmet Banoffe · 330 ml" || store.order.Items[1].Description != "Açaí de banana · banana · doce de leite" || store.order.EstimatedTotalCents != 4680 || store.order.Delivery.DeliveryFeeCents != 500 {
 		t.Fatalf("expected both cart items to be persisted, got %+v", store.order.Items)
+	}
+}
+
+func TestCreateOrderRejectsNeighborhoodOutsideDeliveryZones(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{}
+	requestBody := `{"customer":{"name":"Ana Silva","phone":"21999990000"},"acai":{"flavorId":"banana","sizeId":"500"},"delivery":{"postalCode":"20000-000","street":"Rua Jade","number":"10","neighborhood":"Bairro sem cobertura"},"payment":{"method":"pix"},"estimatedTotalCents":1990}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity || store.called {
+		t.Fatalf("expected uncovered neighborhood to be rejected before persistence, got status %d", response.Code)
 	}
 }
 

@@ -9,10 +9,12 @@ import (
 const (
 	StoreSettingsRuleKey = "store_settings"
 	StoreTimeZone        = "America/Sao_Paulo"
+	DeliveryOrigin       = "Rua Nepomuceno, 12, Realengo, Rio de Janeiro - RJ"
 )
 
 var ErrInvalidStoreSettings = errors.New("invalid store settings")
 var ErrStoreClosed = errors.New("store is closed")
+var ErrDeliveryAreaUnavailable = errors.New("delivery area is unavailable")
 
 type OperatingHours struct {
 	Enabled  bool   `json:"enabled"`
@@ -25,11 +27,20 @@ type StoreStory struct {
 	Body  string `json:"body"`
 }
 
+type DeliveryZone struct {
+	Name          string   `json:"name"`
+	Neighborhoods []string `json:"neighborhoods"`
+	FeeCents      int      `json:"feeCents"`
+	Enabled       bool     `json:"enabled"`
+}
+
 type StoreSettings struct {
-	WeeklyHours    map[string]OperatingHours `json:"weeklyHours"`
-	Story          StoreStory                `json:"story"`
-	WhatsAppNumber string                    `json:"whatsAppNumber"`
-	ManualOverride *bool                     `json:"manualOverride"`
+	WeeklyHours           map[string]OperatingHours `json:"weeklyHours"`
+	Story                 StoreStory                `json:"story"`
+	WhatsAppNumber        string                    `json:"whatsAppNumber"`
+	ManualOverride        *bool                     `json:"manualOverride"`
+	DeliveryOriginAddress string                    `json:"deliveryOriginAddress"`
+	DeliveryZones         []DeliveryZone            `json:"deliveryZones"`
 }
 
 type StoreStatus struct {
@@ -49,6 +60,28 @@ var weekdayKeys = map[string]time.Weekday{
 	"saturday":  time.Saturday,
 }
 
+func NormalizeNeighborhood(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(value), " "))
+}
+
+func FindDeliveryZone(settings StoreSettings, neighborhood string) (DeliveryZone, bool) {
+	neighborhood = NormalizeNeighborhood(neighborhood)
+	if neighborhood == "" {
+		return DeliveryZone{}, false
+	}
+	for _, zone := range settings.DeliveryZones {
+		if !zone.Enabled {
+			continue
+		}
+		for _, coveredNeighborhood := range zone.Neighborhoods {
+			if NormalizeNeighborhood(coveredNeighborhood) == neighborhood {
+				return zone, true
+			}
+		}
+	}
+	return DeliveryZone{}, false
+}
+
 func DefaultStoreSettings() StoreSettings {
 	return StoreSettings{
 		WeeklyHours: map[string]OperatingHours{
@@ -64,7 +97,14 @@ func DefaultStoreSettings() StoreSettings {
 			Title: "Um intervalo gostoso muda o dia.",
 			Body:  "Açaí de verdade, feito com carinho em cada pedido.",
 		},
-		WhatsAppNumber: "5521990174473",
+		WhatsAppNumber:        "5521990174473",
+		DeliveryOriginAddress: DeliveryOrigin,
+		DeliveryZones: []DeliveryZone{{
+			Name:          "Realengo",
+			Neighborhoods: []string{"Realengo"},
+			FeeCents:      300,
+			Enabled:       true,
+		}},
 	}
 }
 
@@ -80,6 +120,32 @@ func ValidateStoreSettings(settings StoreSettings) error {
 	}
 	if !IsValidBrazilianMobilePhone(whatsAppDigits) {
 		return ErrInvalidStoreSettings
+	}
+	if strings.TrimSpace(settings.DeliveryOriginAddress) == "" || len(settings.DeliveryOriginAddress) > 200 || len(settings.DeliveryZones) > 50 {
+		return ErrInvalidStoreSettings
+	}
+	zoneNames := make(map[string]struct{}, len(settings.DeliveryZones))
+	neighborhoods := make(map[string]struct{})
+	for _, zone := range settings.DeliveryZones {
+		zoneName := NormalizeNeighborhood(zone.Name)
+		if zoneName == "" || len(zone.Name) > 80 || zone.FeeCents < 0 || zone.FeeCents > 100_000 ||
+			len(zone.Neighborhoods) == 0 || len(zone.Neighborhoods) > 50 {
+			return ErrInvalidStoreSettings
+		}
+		if _, exists := zoneNames[zoneName]; exists {
+			return ErrInvalidStoreSettings
+		}
+		zoneNames[zoneName] = struct{}{}
+		for _, neighborhood := range zone.Neighborhoods {
+			name := NormalizeNeighborhood(neighborhood)
+			if name == "" || len(neighborhood) > 80 {
+				return ErrInvalidStoreSettings
+			}
+			if _, exists := neighborhoods[name]; exists {
+				return ErrInvalidStoreSettings
+			}
+			neighborhoods[name] = struct{}{}
+		}
 	}
 
 	for day, hours := range settings.WeeklyHours {

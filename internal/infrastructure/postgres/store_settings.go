@@ -24,7 +24,7 @@ func (store *Store) StoreSettings(ctx context.Context) (domain.StoreSettings, er
 		return domain.StoreSettings{}, fmt.Errorf("query store settings: %w", err)
 	}
 
-	var settings domain.StoreSettings
+	settings := domain.DefaultStoreSettings()
 	if err := json.Unmarshal(rawValue, &settings); err != nil {
 		return domain.StoreSettings{}, fmt.Errorf("decode store settings: %w", err)
 	}

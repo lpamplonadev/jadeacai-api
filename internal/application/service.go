@@ -71,7 +71,27 @@ func (service *Service) Create(ctx context.Context, request CreateOrderRequest) 
 	if !status.IsOpen {
 		return CreatedOrder{}, domain.ErrStoreClosed
 	}
-	return service.repository.Create(ctx, request)
+	zone, covered := domain.FindDeliveryZone(status.Settings, request.Delivery.Neighborhood)
+	if !covered {
+		return CreatedOrder{}, domain.ErrDeliveryAreaUnavailable
+	}
+	request.Delivery.ZoneName = zone.Name
+	request.Delivery.DeliveryFeeCents = zone.FeeCents
+	if len(request.Items) > 0 {
+		itemsSubtotalCents := 0
+		for _, item := range request.Items {
+			itemsSubtotalCents += item.EstimatedSubtotalCents
+		}
+		request.EstimatedTotalCents = itemsSubtotalCents + zone.FeeCents
+	}
+	created, err := service.repository.Create(ctx, request)
+	if err != nil {
+		return CreatedOrder{}, err
+	}
+	created.DeliveryZoneName = zone.Name
+	created.DeliveryFeeCents = zone.FeeCents
+	created.EstimatedTotalCents = request.EstimatedTotalCents
+	return created, nil
 }
 
 func (service *Service) StoreSettings(ctx context.Context) (domain.StoreSettings, error) {
@@ -94,6 +114,13 @@ func (service *Service) StoreStatus(ctx context.Context, now time.Time) (domain.
 }
 
 func (service *Service) UpdateStoreSettings(ctx context.Context, settings domain.StoreSettings) error {
+	defaults := domain.DefaultStoreSettings()
+	if settings.DeliveryOriginAddress == "" {
+		settings.DeliveryOriginAddress = defaults.DeliveryOriginAddress
+	}
+	if settings.DeliveryZones == nil {
+		settings.DeliveryZones = defaults.DeliveryZones
+	}
 	if err := domain.ValidateStoreSettings(settings); err != nil {
 		return err
 	}

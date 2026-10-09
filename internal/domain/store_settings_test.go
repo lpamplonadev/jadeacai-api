@@ -62,3 +62,34 @@ func TestValidateStoreSettingsRejectsInvalidHoursAndWhatsAppNumber(t *testing.T)
 		t.Fatal("expected invalid WhatsApp number to be rejected")
 	}
 }
+
+func TestDefaultDeliveryZoneCoversRealengoForThreeReais(t *testing.T) {
+	zone, found := FindDeliveryZone(DefaultStoreSettings(), "  realengo ")
+	if !found || zone.Name != "Realengo" || zone.FeeCents != 300 {
+		t.Fatalf("expected Realengo delivery zone at 300 cents, got %+v, found=%t", zone, found)
+	}
+}
+
+func TestFindDeliveryZoneRejectsDisabledAndUnknownNeighborhoods(t *testing.T) {
+	settings := DefaultStoreSettings()
+	settings.DeliveryZones[0].Enabled = false
+	if _, found := FindDeliveryZone(settings, "Realengo"); found {
+		t.Fatal("disabled delivery zone should not match")
+	}
+	if _, found := FindDeliveryZone(settings, "Bangu"); found {
+		t.Fatal("unconfigured neighborhood should not match")
+	}
+}
+
+func TestValidateStoreSettingsRejectsOverlappingDeliveryNeighborhoods(t *testing.T) {
+	settings := DefaultStoreSettings()
+	settings.DeliveryZones = append(settings.DeliveryZones, DeliveryZone{
+		Name:          "Outra região",
+		Neighborhoods: []string{" realengo "},
+		FeeCents:      500,
+		Enabled:       true,
+	})
+	if ValidateStoreSettings(settings) == nil {
+		t.Fatal("expected duplicate delivery neighborhood to be rejected")
+	}
+}

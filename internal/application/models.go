@@ -41,12 +41,14 @@ type OrderAcai struct {
 }
 
 type OrderDelivery struct {
-	PostalCode   string `json:"postalCode"`
-	Street       string `json:"street"`
-	Number       string `json:"number"`
-	Neighborhood string `json:"neighborhood"`
-	Complement   string `json:"complement"`
-	Reference    string `json:"reference"`
+	PostalCode       string `json:"postalCode"`
+	Street           string `json:"street"`
+	Number           string `json:"number"`
+	Neighborhood     string `json:"neighborhood"`
+	Complement       string `json:"complement"`
+	Reference        string `json:"reference"`
+	ZoneName         string `json:"zoneName,omitempty"`
+	DeliveryFeeCents int    `json:"deliveryFeeCents"`
 }
 
 type OrderPayment struct {
@@ -76,9 +78,12 @@ type StoredOrder struct {
 }
 
 type CreatedOrder struct {
-	ID          string
-	OrderNumber int
-	OrderDate   string
+	ID                  string
+	OrderNumber         int
+	OrderDate           string
+	DeliveryZoneName    string
+	DeliveryFeeCents    int
+	EstimatedTotalCents int
 }
 
 type OrderTracking struct {
@@ -121,17 +126,17 @@ type DashboardData struct {
 }
 
 type CatalogItemRecord struct {
-	ID         string  `json:"id"`
-	ItemKey    string  `json:"itemKey"`
-	Kind       string  `json:"kind"`
-	Name       string  `json:"name"`
-	Description string `json:"description"`
-	ImageURL   string  `json:"imageUrl"`
-	ImageAlt   string  `json:"imageAlt"`
-	PriceCents int     `json:"priceCents"`
-	Available  bool    `json:"available"`
-	SortOrder  int     `json:"sortOrder"`
-	DeletedAt  *string `json:"deletedAt"`
+	ID          string  `json:"id"`
+	ItemKey     string  `json:"itemKey"`
+	Kind        string  `json:"kind"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	ImageURL    string  `json:"imageUrl"`
+	ImageAlt    string  `json:"imageAlt"`
+	PriceCents  int     `json:"priceCents"`
+	Available   bool    `json:"available"`
+	SortOrder   int     `json:"sortOrder"`
+	DeletedAt   *string `json:"deletedAt"`
 }
 
 type CatalogRuleRecord struct {
@@ -226,24 +231,24 @@ type CatalogData struct {
 }
 
 type CreateCatalogItemRequest struct {
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
 	Description string `json:"description"`
-	ImageURL   string `json:"imageUrl"`
-	ImageAlt   string `json:"imageAlt"`
-	PriceCents int    `json:"priceCents"`
-	Available  *bool  `json:"available"`
-	SortOrder  int    `json:"sortOrder"`
+	ImageURL    string `json:"imageUrl"`
+	ImageAlt    string `json:"imageAlt"`
+	PriceCents  int    `json:"priceCents"`
+	Available   *bool  `json:"available"`
+	SortOrder   int    `json:"sortOrder"`
 }
 
 type UpdateCatalogItemRequest struct {
-	Name       *string `json:"name"`
+	Name        *string `json:"name"`
 	Description *string `json:"description"`
-	ImageURL   *string `json:"imageUrl"`
-	ImageAlt   *string `json:"imageAlt"`
-	PriceCents *int    `json:"priceCents"`
-	Available  *bool   `json:"available"`
-	SortOrder  *int    `json:"sortOrder"`
+	ImageURL    *string `json:"imageUrl"`
+	ImageAlt    *string `json:"imageAlt"`
+	PriceCents  *int    `json:"priceCents"`
+	Available   *bool   `json:"available"`
+	SortOrder   *int    `json:"sortOrder"`
 }
 
 type CatalogComboItemInput struct {

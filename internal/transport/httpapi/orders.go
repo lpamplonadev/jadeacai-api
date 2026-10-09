@@ -172,6 +172,10 @@ func createOrder(store *application.Service) gin.HandlerFunc {
 			context.JSON(http.StatusConflict, gin.H{"error": "store_closed", "message": "A loja está fechada no momento."})
 			return
 		}
+		if errors.Is(err, domain.ErrDeliveryAreaUnavailable) {
+			context.JSON(http.StatusUnprocessableEntity, gin.H{"error": "delivery_area_unavailable", "message": "Ainda não atendemos esse bairro."})
+			return
+		}
 		if errors.Is(err, domain.ErrInvalidPhone) {
 			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid customer phone"})
 			return
@@ -187,11 +191,14 @@ func createOrder(store *application.Service) gin.HandlerFunc {
 		}
 
 		context.JSON(http.StatusAccepted, gin.H{
-			"status":      "received",
-			"persisted":   true,
-			"orderId":     created.ID,
-			"orderNumber": created.OrderNumber,
-			"orderDate":   created.OrderDate,
+			"status":              "received",
+			"persisted":           true,
+			"orderId":             created.ID,
+			"orderNumber":         created.OrderNumber,
+			"orderDate":           created.OrderDate,
+			"deliveryZoneName":    created.DeliveryZoneName,
+			"deliveryFeeCents":    created.DeliveryFeeCents,
+			"estimatedTotalCents": created.EstimatedTotalCents,
 		})
 	}
 }
