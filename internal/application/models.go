@@ -81,6 +81,13 @@ type CreatedOrder struct {
 	OrderDate   string
 }
 
+type OrderTracking struct {
+	OrderNumber int       `json:"orderNumber"`
+	OrderDate   string    `json:"orderDate"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 type PaginatedOrders struct {
 	Orders []StoredOrder `json:"orders"`
 	Page   int           `json:"page"`

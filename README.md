@@ -90,6 +90,14 @@ O JSON contém `customer` (`name`, `phone`), `acai` com a primeira configuraçã
 
 A API grava cada pedido na tabela `orders` do PostgreSQL e responde `202 Accepted` com `{"status":"received","persisted":true,"orderId":"...","orderNumber":1,"orderDate":"2026-09-29"}`. Quando a loja está fechada pelo horário ou pelo controle manual, responde `409 Conflict` sem persistir. Em caso de outra falha ao gravar, responde `500` e não informa sucesso. `estimatedTotalCents` ainda é informado pelo cliente e não é recalculado pela API; valide os preços no backend antes de usar esse valor para cobrança.
 
+O `orderId` aleatório permite acompanhar o pedido sem cadastro. O link público do frontend usa esse ID como credencial e consulta:
+
+```http
+GET /api/v1/orders/{orderId}/tracking
+```
+
+A resposta contém somente `orderNumber`, `orderDate`, `status` e `createdAt`; dados pessoais e endereço não são expostos. A rota responde `404` quando o pedido não existe e envia `Cache-Control: no-store`. Trate o link como privado e não o publique.
+
 ## Listagem Admin de pedidos
 
 ```http

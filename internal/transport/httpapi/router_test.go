@@ -20,6 +20,10 @@ type testOrderStore struct {
 	created         createdOrder
 	err             error
 	called          bool
+	tracking        orderTracking
+	trackingFound   bool
+	trackingErr     error
+	trackingCalled  bool
 	listResult      paginatedOrders
 	listFilter      orderListFilter
 	listErr         error
@@ -54,6 +58,11 @@ func (store *testOrderStore) Create(_ context.Context, request createOrderReques
 	store.order = request
 	store.called = true
 	return store.created, store.err
+}
+
+func (store *testOrderStore) TrackOrder(_ context.Context, _ string) (orderTracking, bool, error) {
+	store.trackingCalled = true
+	return store.tracking, store.trackingFound, store.trackingErr
 }
 
 func (store *testOrderStore) List(_ context.Context, filter orderListFilter) (paginatedOrders, error) {
@@ -170,6 +179,54 @@ func TestPublicStoreStatusRespectsManualOverride(t *testing.T) {
 	}
 	if status.IsOpen || status.ManualOverride == nil || *status.ManualOverride {
 		t.Fatalf("expected manually closed status, got %+v", status)
+	}
+}
+
+func TestPublicOrderTrackingReturnsOnlyOrderStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{
+		tracking: orderTracking{
+			OrderNumber: 7,
+			OrderDate:   "2026-10-08",
+			Status:      "preparing",
+		},
+		trackingFound: true,
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/orders/a4f535aa-8c2b-4f0f-9c31-783061cc7201/tracking", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(store).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !store.trackingCalled || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected uncached public tracking response, called=%t cache=%q", store.trackingCalled, response.Header().Get("Cache-Control"))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode tracking response: %v", err)
+	}
+	if body["orderNumber"] != float64(7) || body["orderDate"] != "2026-10-08" || body["status"] != "preparing" {
+		t.Fatalf("unexpected tracking response: %+v", body)
+	}
+	for _, privateField := range []string{"customerName", "customerPhone", "orderData", "address"} {
+		if _, exists := body[privateField]; exists {
+			t.Fatalf("tracking response unexpectedly contains %q", privateField)
+		}
+	}
+}
+
+func TestPublicOrderTrackingHidesInvalidAndUnknownOrders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &testOrderStore{}
+	for _, orderID := range []string{"not-a-uuid", "a4f535aa-8c2b-4f0f-9c31-783061cc7201"} {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+orderID+"/tracking", nil)
+		response := httptest.NewRecorder()
+		newRouter(store).ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("expected unknown order %q to return %d, got %d", orderID, http.StatusNotFound, response.Code)
+		}
 	}
 }
 

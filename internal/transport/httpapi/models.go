@@ -11,6 +11,7 @@ type orderPayment = application.OrderPayment
 type orderListFilter = application.OrderListFilter
 type storedOrder = application.StoredOrder
 type createdOrder = application.CreatedOrder
+type orderTracking = application.OrderTracking
 type paginatedOrders = application.PaginatedOrders
 type orderStatusCount = application.OrderStatusCount
 type dashboardRecentOrder = application.DashboardRecentOrder

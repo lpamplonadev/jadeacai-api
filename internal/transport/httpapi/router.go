@@ -25,6 +25,7 @@ func NewRouter(service *application.Service, adminAPIKey string) *gin.Engine {
 	router.GET("/api/v1/store/status", getStoreStatus(service))
 	router.GET("/api/v1/menu/catalog", getMenuCatalog(service))
 	router.GET("/api/v1/menu/combos", getMenuCombos(service))
+	router.GET("/api/v1/orders/:orderId/tracking", trackOrder(service))
 	router.POST("/api/v1/orders", createOrder(service))
 
 	adminRoutes := router.Group("/api/v1/admin")

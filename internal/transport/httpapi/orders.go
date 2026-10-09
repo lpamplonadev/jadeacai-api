@@ -87,6 +87,34 @@ func listOrders(store *application.Service) gin.HandlerFunc {
 	}
 }
 
+func trackOrder(store *application.Service) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		orderID := context.Param("orderId")
+		if !domain.IsValidUUID(orderID) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+
+		order, found, err := store.TrackOrder(context.Request.Context(), orderID)
+		if errors.Is(err, application.ErrInvalidInput) {
+			context.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		if err != nil {
+			log.Printf("track order: %v", err)
+			context.JSON(http.StatusInternalServerError, gin.H{"error": "could not load order status"})
+			return
+		}
+		if !found {
+			context.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+
+		context.Header("Cache-Control", "no-store")
+		context.JSON(http.StatusOK, order)
+	}
+}
+
 func parsePositiveQuery(raw string, fallback, maximum int) (int, bool) {
 	if raw == "" {
 		return fallback, true

@@ -20,6 +20,7 @@ type Repository interface {
 	StoreSettings(context.Context) (domain.StoreSettings, error)
 	SaveStoreSettings(context.Context, domain.StoreSettings) error
 	List(context.Context, OrderListFilter) (PaginatedOrders, error)
+	TrackOrder(context.Context, string) (OrderTracking, bool, error)
 	Dashboard(context.Context, string) (DashboardData, error)
 	UpdateStatus(context.Context, string, string) (bool, error)
 	Catalog(context.Context) (CatalogData, error)
@@ -127,6 +128,13 @@ func (service *Service) List(ctx context.Context, filter OrderListFilter) (Pagin
 		}
 	}
 	return service.repository.List(ctx, filter)
+}
+
+func (service *Service) TrackOrder(ctx context.Context, orderID string) (OrderTracking, bool, error) {
+	if !domain.IsValidUUID(orderID) {
+		return OrderTracking{}, false, ErrInvalidInput
+	}
+	return service.repository.TrackOrder(ctx, orderID)
 }
 
 func (service *Service) Dashboard(ctx context.Context, date string) (DashboardData, error) {

@@ -272,6 +272,29 @@ func (store *Store) UpdateStatus(ctx context.Context, orderID, status string) (b
 	return true, nil
 }
 
+func (store *Store) TrackOrder(ctx context.Context, orderID string) (orderTracking, bool, error) {
+	const query = `
+		SELECT order_number, to_char(order_date, 'YYYY-MM-DD'), status, created_at
+		FROM orders
+		WHERE id = $1::uuid
+	`
+
+	var order orderTracking
+	err := store.db.QueryRowContext(ctx, query, orderID).Scan(
+		&order.OrderNumber,
+		&order.OrderDate,
+		&order.Status,
+		&order.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return orderTracking{}, false, nil
+	}
+	if err != nil {
+		return orderTracking{}, false, fmt.Errorf("track order: %w", err)
+	}
+	return order, true, nil
+}
+
 func (store *Store) Close() {
 	store.db.Close()
 }
