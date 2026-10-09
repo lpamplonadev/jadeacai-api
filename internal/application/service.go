@@ -119,7 +119,7 @@ func (service *Service) UpdateStoreSettings(ctx context.Context, settings domain
 		settings.DeliveryOriginAddress = defaults.DeliveryOriginAddress
 	}
 	if settings.DeliveryZones == nil {
-		settings.DeliveryZones = defaults.DeliveryZones
+		settings.DeliveryZones = []domain.DeliveryZone{}
 	}
 	if err := domain.ValidateStoreSettings(settings); err != nil {
 		return err

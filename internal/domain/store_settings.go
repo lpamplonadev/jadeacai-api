@@ -106,38 +106,7 @@ func DefaultStoreSettings() StoreSettings {
 		},
 		WhatsAppNumber:        "5521990174473",
 		DeliveryOriginAddress: DeliveryOrigin,
-		DeliveryZones: []DeliveryZone{
-			{
-				Name:          "Realengo",
-				Neighborhoods: []string{"Realengo"},
-				FeeCents:      300,
-				Enabled:       true,
-			},
-			{
-				Name:          "Padre Miguel",
-				Neighborhoods: []string{"Padre Miguel"},
-				FeeCents:      0,
-				Enabled:       false,
-			},
-			{
-				Name:          "Bangu",
-				Neighborhoods: []string{"Bangu"},
-				FeeCents:      0,
-				Enabled:       false,
-			},
-			{
-				Name:          "Sulacap",
-				Neighborhoods: []string{"Sulacap"},
-				FeeCents:      0,
-				Enabled:       false,
-			},
-			{
-				Name:          "Magalhães",
-				Neighborhoods: []string{"Magalhães Bastos"},
-				FeeCents:      0,
-				Enabled:       false,
-			},
-		},
+		DeliveryZones:         []DeliveryZone{},
 	}
 }
 

@@ -63,40 +63,22 @@ func TestValidateStoreSettingsRejectsInvalidHoursAndWhatsAppNumber(t *testing.T)
 	}
 }
 
-func TestDefaultDeliveryZoneCoversRealengoForThreeReais(t *testing.T) {
-	zone, found := FindDeliveryZone(DefaultStoreSettings(), "  realengo ")
-	if !found || zone.Name != "Realengo" || zone.FeeCents != 300 {
-		t.Fatalf("expected Realengo delivery zone at 300 cents, got %+v, found=%t", zone, found)
-	}
-}
 
-func TestDefaultDeliveryZonesIncludeRequestedNeighborhoodsDisabledUntilPriced(t *testing.T) {
-	settings := DefaultStoreSettings()
-	expected := map[string]string{
-		"Padre Miguel": "Padre Miguel",
-		"Bangu":        "Bangu",
-		"Sulacap":      "Sulacap",
-		"Magalhães":    "Magalhães Bastos",
-	}
-	for _, zone := range settings.DeliveryZones {
-		neighborhood, exists := expected[zone.Name]
-		if !exists {
-			continue
-		}
-		if zone.Enabled || zone.FeeCents != 0 || len(zone.Neighborhoods) != 1 || zone.Neighborhoods[0] != neighborhood {
-			t.Fatalf("expected %q to be disabled with a pending fee and bairro %q, got %+v", zone.Name, neighborhood, zone)
-		}
-		delete(expected, zone.Name)
-	}
-	if len(expected) > 0 {
-		t.Fatalf("default zones missing requested neighborhoods: %+v", expected)
+func TestDefaultStoreSettingsStartsWithoutDeliveryZones(t *testing.T) {
+	if zones := DefaultStoreSettings().DeliveryZones; zones == nil || len(zones) != 0 {
+		t.Fatalf("expected delivery zones to start empty, got %+v", zones)
 	}
 }
 
 func TestFindDeliveryZoneRejectsDisabledAndUnknownNeighborhoods(t *testing.T) {
 	settings := DefaultStoreSettings()
-	settings.DeliveryZones[0].Enabled = false
-	if _, found := FindDeliveryZone(settings, "Realengo"); found {
+	settings.DeliveryZones = []DeliveryZone{{
+		Name:          "Bangu",
+		Neighborhoods: []string{"Bangu"},
+		FeeCents:      500,
+		Enabled:       false,
+	}}
+	if _, found := FindDeliveryZone(settings, "Bangu"); found {
 		t.Fatal("disabled delivery zone should not match")
 	}
 	if _, found := FindDeliveryZone(settings, "Bangu"); found {
@@ -106,7 +88,12 @@ func TestFindDeliveryZoneRejectsDisabledAndUnknownNeighborhoods(t *testing.T) {
 
 func TestFindDeliveryZoneMatchesNeighborhoodWithDifferentAccents(t *testing.T) {
 	settings := DefaultStoreSettings()
-	settings.DeliveryZones[4].Enabled = true
+	settings.DeliveryZones = []DeliveryZone{{
+		Name:          "Magalhães",
+		Neighborhoods: []string{"Magalhães Bastos"},
+		FeeCents:      500,
+		Enabled:       true,
+	}}
 	zone, found := FindDeliveryZone(settings, "Magalhaes   Bastos")
 	if !found || NormalizeNeighborhood(zone.Name) != NormalizeNeighborhood("Magalhaes") {
 		t.Fatalf("expected accented zone name to match unaccented input, got %+v, found=%t", zone, found)
@@ -115,12 +102,20 @@ func TestFindDeliveryZoneMatchesNeighborhoodWithDifferentAccents(t *testing.T) {
 
 func TestValidateStoreSettingsRejectsOverlappingDeliveryNeighborhoods(t *testing.T) {
 	settings := DefaultStoreSettings()
-	settings.DeliveryZones = append(settings.DeliveryZones, DeliveryZone{
-		Name:          "Outra região",
-		Neighborhoods: []string{" realengo "},
-		FeeCents:      500,
-		Enabled:       true,
-	})
+	settings.DeliveryZones = []DeliveryZone{
+		{
+			Name:          "Realengo",
+			Neighborhoods: []string{"Realengo"},
+			FeeCents:      300,
+			Enabled:       true,
+		},
+		{
+			Name:          "Outra região",
+			Neighborhoods: []string{" realengo "},
+			FeeCents:      500,
+			Enabled:       true,
+		},
+	}
 	if ValidateStoreSettings(settings) == nil {
 		t.Fatal("expected duplicate delivery neighborhood to be rejected")
 	}
