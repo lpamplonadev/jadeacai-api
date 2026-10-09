@@ -70,6 +70,29 @@ func TestDefaultDeliveryZoneCoversRealengoForThreeReais(t *testing.T) {
 	}
 }
 
+func TestDefaultDeliveryZonesIncludeRequestedNeighborhoodsDisabledUntilPriced(t *testing.T) {
+	settings := DefaultStoreSettings()
+	expected := map[string]string{
+		"Padre Miguel": "Padre Miguel",
+		"Bangu":        "Bangu",
+		"Sulacap":      "Sulacap",
+		"Magalhães":    "Magalhães Bastos",
+	}
+	for _, zone := range settings.DeliveryZones {
+		neighborhood, exists := expected[zone.Name]
+		if !exists {
+			continue
+		}
+		if zone.Enabled || zone.FeeCents != 0 || len(zone.Neighborhoods) != 1 || zone.Neighborhoods[0] != neighborhood {
+			t.Fatalf("expected %q to be disabled with a pending fee and bairro %q, got %+v", zone.Name, neighborhood, zone)
+		}
+		delete(expected, zone.Name)
+	}
+	if len(expected) > 0 {
+		t.Fatalf("default zones missing requested neighborhoods: %+v", expected)
+	}
+}
+
 func TestFindDeliveryZoneRejectsDisabledAndUnknownNeighborhoods(t *testing.T) {
 	settings := DefaultStoreSettings()
 	settings.DeliveryZones[0].Enabled = false
@@ -78,6 +101,15 @@ func TestFindDeliveryZoneRejectsDisabledAndUnknownNeighborhoods(t *testing.T) {
 	}
 	if _, found := FindDeliveryZone(settings, "Bangu"); found {
 		t.Fatal("unconfigured neighborhood should not match")
+	}
+}
+
+func TestFindDeliveryZoneMatchesNeighborhoodWithDifferentAccents(t *testing.T) {
+	settings := DefaultStoreSettings()
+	settings.DeliveryZones[4].Enabled = true
+	zone, found := FindDeliveryZone(settings, "Magalhaes   Bastos")
+	if !found || NormalizeNeighborhood(zone.Name) != NormalizeNeighborhood("Magalhaes") {
+		t.Fatalf("expected accented zone name to match unaccented input, got %+v, found=%t", zone, found)
 	}
 }
 
